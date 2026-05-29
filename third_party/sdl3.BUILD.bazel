@@ -1,0 +1,24 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(["**"]),
+)
+
+cmake(
+    name = "sdl3",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SDL_EXAMPLES": "OFF",
+        "SDL_INSTALL_TESTS": "OFF",
+        "SDL_SHARED": "ON",
+        "SDL_STATIC": "OFF",
+        "SDL_TESTS": "OFF",
+        "SDL_TEST_LIBRARY": "OFF",
+    },
+    lib_source = ":all_srcs",
+    out_include_dir = "include",
+    out_shared_libs = ["libSDL3.so"],
+)

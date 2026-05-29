@@ -1,0 +1,64 @@
+# Bazel output directories
+bazel-*
+/external
+.bazelrc.user
+
+# Bazelisk
+.bazeliskrc
+
+# Generated workspace files
+MODULE.bazel.lock
+
+# Build Event Protocol
+*.bes
+
+# Test logs and coverage
+coverage.dat
+coverage/
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# Visual Studio
+.vs/
+
+# macOS
+.DS_Store
+
+# Linux
+*~
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Compiler outputs
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+
+# CMake (if used alongside Bazel)
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+
+# clangd
+.cache/
+.clangd
+compile_commands.json
+
+# Slang shader artifacts (optional)
+*.spv
+*.dxil
+*.dxbc
+*.air
+*.metallib

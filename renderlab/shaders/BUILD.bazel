@@ -1,0 +1,51 @@
+load("@rules_vulkan//vulkan:defs.bzl", "shader_group", "slang_shader")
+
+package(default_visibility = ["//visibility:public"])
+
+_COMMON_SLANG_OPTS = [
+    "-emit-spirv-directly",
+    "-fvk-use-entrypoint-name",
+    "-fvk-use-gl-layout",
+    "-fspv-reflect",
+    "-g",
+    "-warnings-as-errors",
+    "all",
+]
+
+slang_shader(
+    name = "triangle_vert",
+    srcs = ["triangle.slang"],
+    out = "triangle.vert.spv",
+    entry = "vertexMain",
+    opts = _COMMON_SLANG_OPTS,
+    profile = "spirv_1_4",
+    reflect = "triangle.vert.reflection.json",
+    stage = "vertex",
+    target = "spirv",
+)
+
+slang_shader(
+    name = "triangle_frag",
+    srcs = ["triangle.slang"],
+    out = "triangle.frag.spv",
+    entry = "fragmentMain",
+    opts = _COMMON_SLANG_OPTS,
+    profile = "spirv_1_4",
+    reflect = "triangle.frag.reflection.json",
+    stage = "fragment",
+    target = "spirv",
+)
+
+shader_group(
+    name = "runtime_shaders",
+    pkg_prefix = "renderlab/shaders/",
+    deps = [
+        ":triangle_frag",
+        ":triangle_vert",
+    ],
+)
+
+alias(
+    name = "all_shaders",
+    actual = ":runtime_shaders",
+)

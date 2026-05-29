@@ -1,0 +1,39 @@
+common --enable_bzlmod
+common --announce_rc
+
+# Prefer clang/clang++ on Linux. Bazel still uses its detected C++ toolchain unless a
+# custom toolchain is registered; these env hints are enough for a first Linux skeleton.
+build --repo_env=CC=clang
+build --repo_env=CXX=clang++
+build --action_env=CC=clang
+build --action_env=CXX=clang++
+
+# Project language baseline.
+build --cxxopt=-std=c++23
+build --host_cxxopt=-std=c++23
+
+# Reasonable defaults. Keep Werror off until third-party and generated code paths are stable.
+build --copt=-Wall
+build --copt=-Wextra
+build --copt=-Wpedantic
+build --copt=-pthread
+build --linkopt=-pthread
+
+build:dev --compilation_mode=dbg
+build:dev --copt=-O0
+build:dev --copt=-g3
+build:dev --strip=never
+
+build:release --compilation_mode=opt
+build:release --copt=-O3
+build:release --copt=-DNDEBUG
+
+build:asan --config=dev
+build:asan --copt=-fsanitize=address
+build:asan --linkopt=-fsanitize=address
+
+build:ubsan --config=dev
+build:ubsan --copt=-fsanitize=undefined
+build:ubsan --linkopt=-fsanitize=undefined
+
+test --test_output=errors

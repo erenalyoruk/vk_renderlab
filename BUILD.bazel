@@ -1,0 +1,33 @@
+load("@buildifier_prebuilt//:rules.bzl", "buildifier")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    ".clang-format",
+    ".clang-tidy",
+])
+
+alias(
+    name = "compile_commands",
+    actual = "@wolfd_bazel_compile_commands//:generate_compile_commands",
+)
+
+buildifier(
+    name = "buildifier.check",
+    exclude_patterns = [
+        "./git/*",
+        "./bazel-*/*",
+    ],
+    lint_mode = "warn",
+    mode = "diff",
+)
+
+buildifier(
+    name = "buildifier.fix",
+    exclude_patterns = [
+        "./git/*",
+        "./bazel-*/*",
+    ],
+    lint_mode = "fix",
+    mode = "fix",
+)

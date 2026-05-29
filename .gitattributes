@@ -1,0 +1,5 @@
+*.bazel text eol=lf
+BUILD.bazel text eol=lf
+MODULE.bazel text eol=lf
+*.bzl text eol=lf
+*.sh text eol=lf

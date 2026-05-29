@@ -1,0 +1,42 @@
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  clang-analyzer-*,
+
+  -*-magic-numbers,
+  -cppcoreguidelines-avoid-do-while,
+  -modernize-use-trailing-return-type,
+  -bugprone-easily-swappable-parameters
+
+WarningsAsErrors: "*"
+HeaderFilterRegex: "^(apps|renderlab)/"
+ExcludeHeaderFilterRegex: "(^external/|^bazel-)"
+SystemHeaders: false
+UseColor: true
+
+HeaderFileExtensions: ["hpp"]
+ImplementationFileExtensions: ["cpp"]
+
+CheckOptions:
+  readability-identifier-naming.DefaultCase: lower_case
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+  readability-identifier-naming.ClassMemberSuffix: "_"
+  readability-identifier-naming.PrivateMemberSuffix: "_"
+  readability-identifier-naming.TemplateParameterCase: CamelCase
+  readability-identifier-naming.TemplateTemplateParameterCase: CamelCase
+  readability-identifier-naming.TypeTemplateParameterCase: CamelCase
+
+  cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor: true
+  cppcoreguidelines-macro-usage.CheckCapsOnly: true
+
+  misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: true
+
+  readability-function-cognitive-complexity.Threshold: 20
+  readability-uppercase-literal-suffix.NewSuffixes: "f;F;l;u;ll;ul;L;U;LL;UL"

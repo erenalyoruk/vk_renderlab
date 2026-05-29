@@ -1,0 +1,14 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "platform",
+    srcs = ["sdl_window.cpp"],
+    hdrs = ["sdl_window.hpp"],
+    deps = [
+        "//renderlab/base",
+        "@sdl3",
+        "@vk_sdk//:vulkan",
+    ],
+)

@@ -1,0 +1,13 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "ui",
+    srcs = ["imgui_layer.cpp"],
+    hdrs = ["imgui_layer.hpp"],
+    deps = [
+        "//renderlab/base",
+        "@imgui//:imgui_core",
+    ],
+)
