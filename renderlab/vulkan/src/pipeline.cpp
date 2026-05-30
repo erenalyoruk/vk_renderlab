@@ -84,6 +84,16 @@ constexpr std::string_view fragment_entry_point = "fragmentMain";
   return create_info;
 }
 
+[[nodiscard]] vk::PipelineDepthStencilStateCreateInfo make_depth_stencil_state(vk::Format depth_format) noexcept {
+  vk::PipelineDepthStencilStateCreateInfo create_info{};
+  create_info.depthTestEnable = depth_format == vk::Format::eUndefined ? vk::False : vk::True;
+  create_info.depthWriteEnable = depth_format == vk::Format::eUndefined ? vk::False : vk::True;
+  create_info.depthCompareOp = vk::CompareOp::eLessOrEqual;
+  create_info.depthBoundsTestEnable = vk::False;
+  create_info.stencilTestEnable = vk::False;
+  return create_info;
+}
+
 [[nodiscard]] vk::PipelineColorBlendAttachmentState make_color_blend_attachment() noexcept {
   vk::PipelineColorBlendAttachmentState attachment{};
   attachment.blendEnable = vk::False;
@@ -123,12 +133,15 @@ graphics_pipeline::graphics_pipeline(const vk::raii::Device& device, const graph
 
   vk::PipelineRenderingCreateInfo rendering_info{};
   rendering_info.setColorAttachmentFormats(color_format_);
+  rendering_info.depthAttachmentFormat = description.depth_format;
 
   const vk::PipelineVertexInputStateCreateInfo vertex_input_state = make_empty_vertex_input_state();
   const vk::PipelineInputAssemblyStateCreateInfo input_assembly_state = make_input_assembly_state();
   const vk::PipelineViewportStateCreateInfo viewport_state = make_viewport_state();
   const vk::PipelineRasterizationStateCreateInfo rasterization_state = make_rasterization_state();
   const vk::PipelineMultisampleStateCreateInfo multisample_state = make_multisample_state();
+  const vk::PipelineDepthStencilStateCreateInfo depth_stencil_state =
+      make_depth_stencil_state(description.depth_format);
   const vk::PipelineColorBlendAttachmentState color_blend_attachment = make_color_blend_attachment();
 
   vk::PipelineColorBlendStateCreateInfo color_blend_state{};
@@ -150,6 +163,7 @@ graphics_pipeline::graphics_pipeline(const vk::raii::Device& device, const graph
   create_info.pViewportState = &viewport_state;
   create_info.pRasterizationState = &rasterization_state;
   create_info.pMultisampleState = &multisample_state;
+  create_info.pDepthStencilState = &depth_stencil_state;
   create_info.pColorBlendState = &color_blend_state;
   create_info.pDynamicState = &dynamic_state;
   create_info.layout = *layout_;

@@ -31,6 +31,7 @@ struct graphics_pipeline_description {
   std::reference_wrapper<const shader_module> vertex_shader;
   std::reference_wrapper<const shader_module> fragment_shader;
   vk::Format color_format = vk::Format::eUndefined;
+  vk::Format depth_format = vk::Format::eUndefined;
 };
 
 class graphics_pipeline final {

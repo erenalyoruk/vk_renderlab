@@ -32,10 +32,19 @@ struct render_path_swapchain_target {
   vk::ClearColorValue clear_color{};
 };
 
+struct render_path_depth_target {
+  vk::Image image{};
+  vk::ImageView image_view{};
+  vk::ImageLayout old_layout = vk::ImageLayout::eUndefined;
+  vk::Format format = vk::Format::eUndefined;
+  vk::ClearDepthStencilValue clear_value{1.0f, 0};
+};
+
 struct render_path_build_info {
   render_path path = render_path::forward_plus;
   render_path_capabilities capabilities{};
   render_path_swapchain_target swapchain{};
+  std::optional<render_path_depth_target> depth = std::nullopt;
   std::optional<std::reference_wrapper<const graphics_pipeline>> debug_pipeline = std::nullopt;
 };
 

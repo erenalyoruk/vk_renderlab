@@ -20,6 +20,7 @@
 #include "base/log.hpp"
 #include "vk/device.hpp"
 #include "vk/frame_graph.hpp"
+#include "vk/memory_allocator.hpp"
 #include "vk/pipeline.hpp"
 #include "vk/render_path.hpp"
 #include "vk/vulkan_context.hpp"
@@ -99,6 +100,36 @@ constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/tr
   create_info.subresourceRange.baseArrayLayer = 0;
   create_info.subresourceRange.layerCount = 1;
   return create_info;
+}
+
+[[nodiscard]] vk::ImageViewCreateInfo make_depth_image_view_create_info(vk::Image image, vk::Format format) noexcept {
+  vk::ImageViewCreateInfo create_info{};
+  create_info.image = image;
+  create_info.viewType = vk::ImageViewType::e2D;
+  create_info.format = format;
+  create_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+  create_info.subresourceRange.baseMipLevel = 0;
+  create_info.subresourceRange.levelCount = 1;
+  create_info.subresourceRange.baseArrayLayer = 0;
+  create_info.subresourceRange.layerCount = 1;
+  return create_info;
+}
+
+[[nodiscard]] vk::Format choose_depth_format(const vk::raii::PhysicalDevice& physical_device) {
+  constexpr std::array candidates = {
+    vk::Format::eD32Sfloat,
+    vk::Format::eD32SfloatS8Uint,
+    vk::Format::eD24UnormS8Uint,
+  };
+
+  for (const vk::Format format : candidates) {
+    const vk::FormatProperties properties = physical_device.getFormatProperties(format);
+    if (static_cast<bool>(properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment)) {
+      return format;
+    }
+  }
+
+  throw std::runtime_error{"no supported Vulkan depth attachment format found"};
 }
 
 [[nodiscard]] platform::extent2d event_extent(const platform::platform_event& event) noexcept {
@@ -214,6 +245,14 @@ bool renderer::suspended() const noexcept { return suspended_; }
 
 bool renderer::has_drawable_extent() const noexcept { return extent_has_area(drawable_extent_); }
 
+bool renderer::has_depth_target(std::size_t image_index) const noexcept {
+  if (image_index >= depth_images_.size() || image_index >= depth_image_views_.size()) {
+    return false;
+  }
+
+  return static_cast<bool>(depth_images_.at(image_index)) && static_cast<bool>(*depth_image_views_.at(image_index));
+}
+
 bool renderer::can_render() const noexcept {
   return !suspended_ && has_drawable_extent() && static_cast<bool>(*swapchain_);
 }
@@ -312,6 +351,7 @@ void renderer::recreate_swapchain() {
   image_in_flight_fences_.assign(swapchain_images_.size(), nullptr);
 
   create_swapchain_image_views();
+  create_depth_resources();
   create_debug_pipeline();
 
   const vk::SemaphoreCreateInfo semaphore_create_info{};
@@ -326,6 +366,10 @@ void renderer::recreate_swapchain() {
 
 void renderer::release_swapchain() noexcept {
   debug_triangle_pipeline_.reset();
+  depth_image_views_.clear();
+  depth_images_.clear();
+  depth_layouts_.clear();
+  depth_format_ = vk::Format::eUndefined;
   render_finished_.clear();
   swapchain_image_views_.clear();
   image_in_flight_fences_.clear();
@@ -344,6 +388,32 @@ void renderer::create_swapchain_image_views() {
   }
 }
 
+void renderer::create_depth_resources() {
+  depth_format_ = choose_depth_format(context_.selected_physical_device_handle());
+  depth_images_.clear();
+  depth_image_views_.clear();
+  depth_layouts_.clear();
+  depth_images_.reserve(swapchain_images_.size());
+  depth_image_views_.reserve(swapchain_images_.size());
+
+  for (std::size_t image_count = 0; image_count < swapchain_images_.size(); ++image_count) {
+    depth_images_.push_back(context_.allocator().create_image(image_description{
+      .format = depth_format_,
+      .extent = vk::Extent3D{swapchain_extent_.width, swapchain_extent_.height, 1},
+      .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
+      .memory = memory_usage::gpu_only,
+    }));
+
+    depth_image_views_.emplace_back(context_.device().handle(),
+                                    make_depth_image_view_create_info(depth_images_.back().handle(), depth_format_));
+  }
+
+  depth_layouts_.assign(depth_images_.size(), vk::ImageLayout::eUndefined);
+
+  RL_RENDER_INFO("depth targets ready: {}x{}, images={}, format={}", swapchain_extent_.width, swapchain_extent_.height,
+                 depth_images_.size(), vk::to_string(depth_format_));
+}
+
 void renderer::create_debug_pipeline() {
   if (!debug_vertex_shader_.has_value()) {
     debug_vertex_shader_.emplace(context_.device().handle(), load_shader_bytes(triangle_vertex_shader_path));
@@ -357,6 +427,7 @@ void renderer::create_debug_pipeline() {
                                                                  .vertex_shader = std::cref(*debug_vertex_shader_),
                                                                  .fragment_shader = std::cref(*debug_fragment_shader_),
                                                                  .color_format = surface_format_.format,
+                                                                 .depth_format = depth_format_,
                                                                });
 
   RL_SHADER_INFO("debug triangle pipeline ready: color_format={}", vk::to_string(surface_format_.format));
@@ -368,6 +439,14 @@ void renderer::build_frame_graph(std::size_t image_index) {
       debug_triangle_pipeline_.has_value()
           ? std::optional<std::reference_wrapper<const graphics_pipeline>>{std::cref(*debug_triangle_pipeline_)}
           : std::nullopt;
+  const std::optional<render_path_depth_target> depth_target =
+      has_depth_target(image_index) ? std::optional<render_path_depth_target>{render_path_depth_target{
+                                        .image = depth_images_.at(image_index).handle(),
+                                        .image_view = *depth_image_views_.at(image_index),
+                                        .old_layout = depth_layouts_.at(image_index),
+                                        .format = depth_format_,
+                                      }}
+                                    : std::nullopt;
 
   build_render_path_frame_graph(frame_graph_, render_path_build_info{
                                                 .path = settings_.path,
@@ -385,6 +464,7 @@ void renderer::build_frame_graph(std::size_t image_index) {
                                                       .extent = swapchain_extent_,
                                                       .clear_color = settings_.clear_color,
                                                     },
+                                                .depth = depth_target,
                                                 .debug_pipeline = debug_pipeline,
                                               });
 }
@@ -402,6 +482,9 @@ void renderer::record_frame_commands(frame_resources& frame, std::size_t image_i
   command_buffer.end();
 
   image_layouts_.at(image_index) = vk::ImageLayout::ePresentSrcKHR;
+  if (has_depth_target(image_index)) {
+    depth_layouts_.at(image_index) = vk::ImageLayout::eDepthAttachmentOptimal;
+  }
 }
 
 void renderer::draw_frame_impl() {
