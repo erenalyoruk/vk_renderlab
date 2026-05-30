@@ -32,6 +32,12 @@ class vulkan_context final : public noncopyable {
   explicit vulkan_context(const platform::sdl_window& window, vulkan_context_config config = {});
   ~vulkan_context() noexcept;
 
+  vulkan_context(vulkan_context& other) = delete;
+  vulkan_context& operator=(vulkan_context& other) = delete;
+
+  vulkan_context(vulkan_context&& other) noexcept = delete;
+  vulkan_context& operator=(vulkan_context&& other) noexcept = delete;
+
   [[nodiscard]] const vk::raii::Context& context() const noexcept;
   [[nodiscard]] const vk::raii::Instance& instance() const noexcept;
   [[nodiscard]] const vk::raii::SurfaceKHR& surface() const noexcept;

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
 
 #include "base/log.hpp"

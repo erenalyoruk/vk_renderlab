@@ -4,10 +4,9 @@
 #include <thread>
 #include <vector>
 
-#include <spdlog/spdlog.h>
-
 #include "assets/file_io.hpp"
 #include "base/log.hpp"
+#include "base/log_level.hpp"
 #include "platform/platform_event.hpp"
 #include "platform/sdl_window.hpp"
 #include "ui/imgui_layer.hpp"
@@ -15,7 +14,7 @@
 
 namespace {
 [[nodiscard]] rl::log::logger_config make_logger_config() {
-  rl::log::logger_config config{};
+  rl::log::logger_config config;
 
   config.application_name = "renderlab";
   config.log_directory = "logs";
@@ -41,7 +40,7 @@ namespace {
 }  // namespace
 
 int main() {
-  rl::log::scoped_logger logging{make_logger_config()};
+  const rl::log::scoped_logger logging{make_logger_config()};
 
   try {
     RL_APP_INFO("starting vk_renderlab");
@@ -53,8 +52,8 @@ int main() {
       .height = 720,
     });
 
-    rl::vulkan::vulkan_context vulkan_context{window};
-    rl::ui::imgui_layer imgui_layer;
+    const rl::vulkan::vulkan_context vulkan_context{window};
+    const rl::ui::imgui_layer imgui_layer;
 
     const auto vertex_shader_path = rl::assets::resolve_runfile("renderlab/shaders/triangle.vert.spv");
     const auto fragment_shader_path = rl::assets::resolve_runfile("renderlab/shaders/triangle.frag.spv");

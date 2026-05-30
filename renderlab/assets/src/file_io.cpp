@@ -1,11 +1,17 @@
 #include "assets/file_io.hpp"
 
-#include <bit>
+#include <algorithm>
+#include <cstddef>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <iosfwd>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace rl::assets {
 
@@ -78,15 +84,19 @@ std::vector<std::byte> read_binary_file(const std::filesystem::path& path) {
     throw std::runtime_error{"failed to query binary file size: " + path.string()};
   }
 
-  std::vector<std::byte> bytes(static_cast<std::size_t>(size));
+  std::vector<char> raw_bytes(static_cast<std::size_t>(size));
   file.seekg(0, std::ios::beg);
 
-  if (!bytes.empty()) {
-    file.read(std::bit_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  if (!raw_bytes.empty()) {
+    file.read(raw_bytes.data(), static_cast<std::streamsize>(raw_bytes.size()));
     if (!file.good()) {
       throw std::runtime_error{"failed to read binary file: " + path.string()};
     }
   }
+
+  std::vector<std::byte> bytes(raw_bytes.size());
+  std::ranges::transform(raw_bytes, bytes.begin(),
+                         [](char value) { return std::byte{static_cast<unsigned char>(value)}; });
 
   return bytes;
 }

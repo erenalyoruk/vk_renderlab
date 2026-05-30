@@ -11,13 +11,14 @@ Checks: >
   clang-analyzer-*,
 
   -*-magic-numbers,
+  -misc-include-cleaner,
   -cppcoreguidelines-avoid-do-while,
   -modernize-use-trailing-return-type,
   -bugprone-easily-swappable-parameters
 
 WarningsAsErrors: "*"
-HeaderFilterRegex: "^(apps|renderlab)/"
-ExcludeHeaderFilterRegex: "(^external/|^bazel-)"
+HeaderFilterRegex: "^(.*/)?(apps|renderlab)/"
+ExcludeHeaderFilterRegex: "(^|.*/)(external|third_party|bazel-[^/]*)(/|$)"
 SystemHeaders: false
 UseColor: true
 

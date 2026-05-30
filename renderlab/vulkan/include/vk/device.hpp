@@ -16,6 +16,12 @@ class device final : public noncopyable {
          const device_requirements& requirements);
   ~device() noexcept;
 
+  device(device& other) = delete;
+  device& operator=(device& other) = delete;
+
+  device(device&& other) noexcept = delete;
+  device& operator=(device&& other) noexcept = delete;
+
   [[nodiscard]] const vk::raii::Device& handle() const noexcept;
   [[nodiscard]] vk::Device raw_handle() const noexcept;
   [[nodiscard]] VkDevice c_handle() const noexcept;

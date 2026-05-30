@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
 
 namespace rl::vulkan {
@@ -111,8 +112,8 @@ void append_extension_with_dependencies(physical_device_info& info, std::string_
 
     families.push_back({
       .index = index,
-      .flags = properties[index].queueFlags,
-      .queue_count = properties[index].queueCount,
+      .flags = properties.at(index).queueFlags,
+      .queue_count = properties.at(index).queueCount,
       .present_supported = present_supported,
     });
   }
@@ -524,13 +525,13 @@ std::vector<physical_device_info> enumerate_physical_devices(const vk::raii::Phy
 std::optional<std::size_t> choose_physical_device(const std::vector<physical_device_info>& devices,
                                                   gpu_preference preference,
                                                   std::optional<std::size_t> preferred_index) {
-  if (preferred_index.has_value() && *preferred_index < devices.size() && devices[*preferred_index].suitable) {
+  if (preferred_index.has_value() && *preferred_index < devices.size() && devices.at(*preferred_index).suitable) {
     return preferred_index;
   }
 
   if (preference == gpu_preference::first_suitable) {
     for (std::size_t index = 0; index < devices.size(); ++index) {
-      if (devices[index].suitable) {
+      if (devices.at(index).suitable) {
         return index;
       }
     }
@@ -542,7 +543,7 @@ std::optional<std::size_t> choose_physical_device(const std::vector<physical_dev
   int best_score = std::numeric_limits<int>::min();
 
   for (std::size_t index = 0; index < devices.size(); ++index) {
-    const physical_device_info& device = devices[index];
+    const physical_device_info& device = devices.at(index);
 
     if (!device.suitable) {
       continue;

@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <print>
 #include <string>
@@ -11,13 +12,18 @@
 
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
+#include <spdlog/common.h>
 #include <spdlog/details/log_msg.h>
+#include <spdlog/logger.h>
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/null_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog-inl.h>
 
 #include "base/log_category.hpp"
+#include "base/log_level.hpp"
+#include "base/log_ring_buffer.hpp"
 
 namespace rl::log {
 
@@ -93,7 +99,7 @@ struct registry {
 [[nodiscard]] std::shared_ptr<spdlog::logger> logger_locked(struct registry& registry, log_category category) {
   const std::size_t index = category_index(category);
   if (index >= registry.loggers.size()) {
-    return registry.loggers[category_index(log_category::core)];
+    return registry.loggers.at(category_index(log_category::core));
   }
 
   return registry.loggers.at(index);
@@ -146,7 +152,7 @@ void shutdown_locked(struct registry& registry) noexcept {
 
 void initialize(logger_config config) {
   auto& state = registry();
-  std::scoped_lock lock{state.mutex};
+  const std::scoped_lock lock{state.mutex};
 
   shutdown_locked(state);
 
@@ -197,7 +203,7 @@ void initialize(logger_config config) {
   }
 
   const std::size_t core_index = category_index(log_category::core);
-  spdlog::set_default_logger(state.loggers[core_index]);
+  spdlog::set_default_logger(state.loggers.at(core_index));
 
   for (std::size_t index = 0; index < category_count; ++index) {
     if (index == core_index) {
@@ -215,20 +221,20 @@ void initialize(logger_config config) {
 
   const std::string log_file = state.log_file.empty() ? std::string{"<disabled>"} : state.log_file.string();
 
-  state.loggers[core_index]->info("logging initialized: level={}, file='{}', async={}, memory_sink={}",
-                                  to_string(state.config.level), log_file, state.config.async,
-                                  state.config.enable_memory_sink);
+  state.loggers.at(core_index)
+      ->info("logging initialized: level={}, file='{}', async={}, memory_sink={}", to_string(state.config.level),
+             log_file, state.config.async, state.config.enable_memory_sink);
 }
 
 void shutdown() noexcept {
   auto& state = registry();
-  std::scoped_lock lock{state.mutex};
+  const std::scoped_lock lock{state.mutex};
   shutdown_locked(state);
 }
 
 bool is_initialized() {
   auto& state = registry();
-  std::scoped_lock lock{state.mutex};
+  const std::scoped_lock lock{state.mutex};
   return state.initialized;
 }
 
@@ -236,7 +242,7 @@ std::shared_ptr<spdlog::logger> logger(log_category category) {
   auto& state = registry();
 
   {
-    std::scoped_lock lock{state.mutex};
+    const std::scoped_lock lock{state.mutex};
     if (state.initialized) {
       return logger_locked(state, category);
     }
@@ -244,19 +250,19 @@ std::shared_ptr<spdlog::logger> logger(log_category category) {
 
   initialize(logger_config{});
 
-  std::scoped_lock lock{state.mutex};
+  const std::scoped_lock lock{state.mutex};
   return logger_locked(state, category);
 }
 
 std::shared_ptr<log_ring_buffer> ring_buffer() {
   auto& state = registry();
-  std::scoped_lock lock{state.mutex};
+  const std::scoped_lock lock{state.mutex};
   return state.ring_buffer;
 }
 
 std::filesystem::path current_log_file() {
   auto& state = registry();
-  std::scoped_lock lock{state.mutex};
+  const std::scoped_lock lock{state.mutex};
   return state.log_file;
 }
 
@@ -267,7 +273,7 @@ void set_level(log_level level) {
     initialize(logger_config{});
   }
 
-  std::scoped_lock lock{state.mutex};
+  const std::scoped_lock lock{state.mutex};
 
   for (const auto& logger : state.loggers) {
     if (logger != nullptr) {
@@ -291,7 +297,7 @@ void flush() {
   std::array<std::shared_ptr<spdlog::logger>, category_count> loggers{};
 
   {
-    std::scoped_lock lock{state.mutex};
+    const std::scoped_lock lock{state.mutex};
     loggers = state.loggers;
   }
 

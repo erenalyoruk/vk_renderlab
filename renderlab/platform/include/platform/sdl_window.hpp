@@ -17,6 +17,12 @@ class sdl_video_session final : public noncopyable {
  public:
   sdl_video_session();
   ~sdl_video_session() noexcept;
+
+  sdl_video_session(sdl_video_session& other) = delete;
+  sdl_video_session& operator=(sdl_video_session& other) = delete;
+
+  sdl_video_session(sdl_video_session&& other) noexcept = delete;
+  sdl_video_session& operator=(sdl_video_session&& other) noexcept = delete;
 };
 
 struct sdl_window_deleter {
