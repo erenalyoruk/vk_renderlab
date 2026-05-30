@@ -22,6 +22,8 @@ enum class platform_event_type : std::uint8_t {
   close_requested,
   window_resized,
   drawable_resized,
+  window_shown,
+  window_hidden,
   window_minimized,
   window_restored,
   focus_gained,
@@ -138,6 +140,7 @@ struct key_modifiers {
 struct window_state {
   extent2d size{};
   extent2d drawable_size{};
+  bool visible = false;
   bool minimized = false;
   bool focused = false;
   bool close_requested = false;

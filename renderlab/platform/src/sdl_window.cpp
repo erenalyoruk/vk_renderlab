@@ -284,6 +284,12 @@ std::optional<platform_event> translate_mouse_wheel_event(const SDL_MouseWheelEv
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
       return translate_window_extent_event(event.window, window_id, platform_event_type::drawable_resized);
 
+    case SDL_EVENT_WINDOW_SHOWN:
+      return translate_empty_window_event(event.window, window_id, platform_event_type::window_shown);
+
+    case SDL_EVENT_WINDOW_HIDDEN:
+      return translate_empty_window_event(event.window, window_id, platform_event_type::window_hidden);
+
     case SDL_EVENT_WINDOW_MINIMIZED:
       return translate_empty_window_event(event.window, window_id, platform_event_type::window_minimized);
 
@@ -342,8 +348,13 @@ void sdl_window_deleter::operator()(SDL_Window* window) const noexcept {
 sdl_window::sdl_window(const window_config& config) {
   RL_PLATFORM_INFO("creating SDL3 window: title='{}', width={}, height={}", config.title, config.width, config.height);
 
-  window_.reset(
-      SDL_CreateWindow(config.title.c_str(), config.width, config.height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE));
+  SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
+
+  if (!config.visible) {
+    flags |= SDL_WINDOW_HIDDEN;
+  }
+
+  window_.reset(SDL_CreateWindow(config.title.c_str(), config.width, config.height, flags));
 
   if (!window_) {
     throw make_sdl_error("SDL_CreateWindow failed");
@@ -369,6 +380,23 @@ std::vector<platform_event> sdl_window::poll_events() {
   }
 
   return events;
+}
+
+void sdl_window::show() {
+  if (!SDL_ShowWindow(window_.get())) {
+    throw make_sdl_error("SDL_ShowWindow failed");
+  }
+
+  refresh_window_state();
+}
+
+void sdl_window::hide() {
+  if (!SDL_HideWindow(window_.get())) {
+    throw make_sdl_error("SDL_HideWindow failed");
+  }
+
+  refresh_window_state();
+  RL_PLATFORM_INFO("SDL3 window hidden");
 }
 
 const window_state& sdl_window::state() const noexcept { return state_; }
@@ -436,6 +464,7 @@ void sdl_window::refresh_window_state() {
     .width = drawable_width,
     .height = drawable_height,
   };
+  state_.visible = !static_cast<bool>(flags & SDL_WINDOW_HIDDEN);
   state_.minimized = static_cast<bool>(flags & SDL_WINDOW_MINIMIZED);
   state_.focused = static_cast<bool>(flags & SDL_WINDOW_INPUT_FOCUS);
 }
@@ -457,6 +486,14 @@ void sdl_window::apply_event(const platform_event& event) noexcept {
         state_.drawable_size = resize->size;
         RL_PLATFORM_DEBUG("window drawable resized: {}x{}", state_.drawable_size.width, state_.drawable_size.height);
       }
+      break;
+    case platform_event_type::window_shown:
+      state_.visible = true;
+      RL_PLATFORM_DEBUG("window shown");
+      break;
+    case platform_event_type::window_hidden:
+      state_.visible = false;
+      RL_PLATFORM_DEBUG("window hidden");
       break;
     case platform_event_type::window_minimized:
       state_.minimized = true;

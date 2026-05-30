@@ -33,6 +33,7 @@ struct window_config {
   std::string title = "Vulkan RenderLab";
   std::int32_t width = 1280;
   std::int32_t height = 720;
+  bool visible = true;
 };
 
 class sdl_window final : public noncopyable {
@@ -41,6 +42,9 @@ class sdl_window final : public noncopyable {
   ~sdl_window() noexcept = default;
 
   [[nodiscard]] std::vector<platform_event> poll_events();
+  void show();
+  void hide();
+
   [[nodiscard]] const window_state& state() const noexcept;
   [[nodiscard]] SDL_Window* native_handle() const noexcept;
   [[nodiscard]] static std::vector<std::string> required_vulkan_extensions();

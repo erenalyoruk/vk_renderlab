@@ -150,6 +150,7 @@ int main() {
       .title = "Vulkan RenderLab",
       .width = 1280,
       .height = 720,
+      .visible = true,
     });
 
     const rl::vulkan::vulkan_context vulkan_context{window};
@@ -174,6 +175,9 @@ int main() {
     bool running = true;
     bool renderer_suspended = window.state().minimized;
     register_event_listeners(event_dispatcher, renderer_suspended);
+
+    window.show();
+    RL_APP_INFO("entering main loop");
 
     while (running && !window.state().close_requested) {
       const std::vector<rl::platform::platform_event> events = window.poll_events();
