@@ -8,7 +8,9 @@
 #include <system_error>
 
 namespace rl::assets {
+
 namespace {
+
 constexpr std::string_view workspace_name = "vk_renderlab";
 
 [[nodiscard]] bool exists_regular_file(const std::filesystem::path& path) {
@@ -45,6 +47,7 @@ constexpr std::string_view workspace_name = "vk_renderlab";
 
   return {};
 }
+
 }  // namespace
 
 std::filesystem::path resolve_runfile(std::string_view workspace_relative_path) {
@@ -61,18 +64,18 @@ std::filesystem::path resolve_runfile(std::string_view workspace_relative_path) 
     return path;
   }
 
-  throw std::runtime_error("unable to resolve Bazel runfile: " + std::string(workspace_relative_path));
+  throw std::runtime_error{"unable to resolve Bazel runfile: " + std::string{workspace_relative_path}};
 }
 
 std::vector<std::byte> read_binary_file(const std::filesystem::path& path) {
-  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  std::ifstream file{path, std::ios::binary | std::ios::ate};
   if (!file.is_open()) {
-    throw std::runtime_error("failed to open binary file: " + path.string());
+    throw std::runtime_error{"failed to open binary file: " + path.string()};
   }
 
   const std::streampos size = file.tellg();
   if (size == std::streampos(-1)) {
-    throw std::runtime_error("failed to query binary file size: " + path.string());
+    throw std::runtime_error{"failed to query binary file size: " + path.string()};
   }
 
   std::vector<std::byte> bytes(static_cast<std::size_t>(size));
@@ -81,7 +84,7 @@ std::vector<std::byte> read_binary_file(const std::filesystem::path& path) {
   if (!bytes.empty()) {
     file.read(std::bit_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     if (!file.good()) {
-      throw std::runtime_error("failed to read binary file: " + path.string());
+      throw std::runtime_error{"failed to read binary file: " + path.string()};
     }
   }
 

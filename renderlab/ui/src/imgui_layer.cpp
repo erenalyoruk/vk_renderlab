@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 namespace rl::ui {
+
 imgui_layer::imgui_layer() {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -13,4 +14,5 @@ imgui_layer::imgui_layer() {
 }
 
 imgui_layer::~imgui_layer() noexcept { ImGui::DestroyContext(); }
+
 }  // namespace rl::ui

@@ -10,6 +10,7 @@
 #include "base/noncopyable.hpp"
 
 namespace rl::platform {
+
 struct window_config {
   std::string title = "Vulkan RenderLab";
   std::int32_t width = 1280;
@@ -30,4 +31,5 @@ class sdl_window final : public noncopyable {
   SDL_Window* window_ = nullptr;
   bool sdl_initialized_ = false;
 };
+
 }  // namespace rl::platform

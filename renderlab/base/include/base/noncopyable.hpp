@@ -1,6 +1,7 @@
 #pragma once
 
 namespace rl {
+
 class noncopyable {
  public:
   noncopyable(const noncopyable&) = delete;
@@ -13,4 +14,5 @@ class noncopyable {
   constexpr noncopyable() noexcept = default;
   ~noncopyable() noexcept = default;
 };
+
 }  // namespace rl

@@ -4,9 +4,14 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "vulkan",
-    srcs = ["src/vulkan_context.cpp"],
+    srcs = [
+        "src/device.cpp",
+        "src/physical_device.cpp",
+        "src/vulkan_context.cpp",
+    ],
     hdrs = [
-        "include/vk/vk_check.hpp",
+        "include/vk/device.hpp",
+        "include/vk/physical_device.hpp",
         "include/vk/vulkan_context.hpp",
     ],
     includes = ["include"],

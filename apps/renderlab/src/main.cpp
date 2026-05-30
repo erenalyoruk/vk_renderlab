@@ -39,7 +39,7 @@ namespace {
 }  // namespace
 
 int main() {
-  rl::log::scoped_logger logging(make_logger_config());
+  rl::log::scoped_logger logging{make_logger_config()};
 
   try {
     RL_APP_INFO("starting vk_renderlab");
@@ -51,7 +51,7 @@ int main() {
       .height = 720,
     });
 
-    rl::vulkan::vulkan_context vulkan_context(window);
+    rl::vulkan::vulkan_context vulkan_context{window};
     rl::ui::imgui_layer imgui_layer;
 
     const auto vertex_shader_path = rl::assets::resolve_runfile("renderlab/shaders/triangle.vert.spv");

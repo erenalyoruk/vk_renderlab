@@ -20,10 +20,12 @@
 #include "base/log_category.hpp"
 
 namespace rl::log {
+
 namespace {
+
 class ring_buffer_sink final : public spdlog::sinks::base_sink<std::mutex> {
  public:
-  explicit ring_buffer_sink(std::shared_ptr<log_ring_buffer> buffer) : buffer_(std::move(buffer)) {}
+  explicit ring_buffer_sink(std::shared_ptr<log_ring_buffer> buffer) : buffer_{std::move(buffer)} {}
 
  protected:
   void sink_it_(const spdlog::details::log_msg& message) override {
@@ -78,7 +80,7 @@ struct registry {
 
 [[nodiscard]] std::filesystem::path make_log_file_path(const logger_config& config) {
   const std::string application_name =
-      config.application_name.empty() ? std::string("renderlab") : config.application_name;
+      config.application_name.empty() ? std::string{"renderlab"} : config.application_name;
 
   if (config.log_directory.empty()) {
     return application_name + ".log";
@@ -144,7 +146,7 @@ void shutdown_locked(struct registry& registry) noexcept {
 
 void initialize(logger_config config) {
   auto& state = registry();
-  std::scoped_lock lock(state.mutex);
+  std::scoped_lock lock{state.mutex};
 
   shutdown_locked(state);
 
@@ -186,7 +188,7 @@ void initialize(logger_config config) {
 
   for (std::size_t index = 0; index < category_count; ++index) {
     const auto category = static_cast<log_category>(index);
-    auto category_logger = make_logger(std::string(to_string(category)), state.sinks, state.config);
+    auto category_logger = make_logger(std::string{to_string(category)}, state.sinks, state.config);
 
     category_logger->set_level(to_spdlog(state.config.level));
     category_logger->flush_on(to_spdlog(state.config.flush_level));
@@ -211,7 +213,7 @@ void initialize(logger_config config) {
 
   state.initialized = true;
 
-  const std::string log_file = state.log_file.empty() ? std::string("<disabled>") : state.log_file.string();
+  const std::string log_file = state.log_file.empty() ? std::string{"<disabled>"} : state.log_file.string();
 
   state.loggers[core_index]->info("logging initialized: level={}, file='{}', async={}, memory_sink={}",
                                   to_string(state.config.level), log_file, state.config.async,
@@ -220,13 +222,13 @@ void initialize(logger_config config) {
 
 void shutdown() noexcept {
   auto& state = registry();
-  std::scoped_lock lock(state.mutex);
+  std::scoped_lock lock{state.mutex};
   shutdown_locked(state);
 }
 
 bool is_initialized() {
   auto& state = registry();
-  std::scoped_lock lock(state.mutex);
+  std::scoped_lock lock{state.mutex};
   return state.initialized;
 }
 
@@ -234,7 +236,7 @@ std::shared_ptr<spdlog::logger> logger(log_category category) {
   auto& state = registry();
 
   {
-    std::scoped_lock lock(state.mutex);
+    std::scoped_lock lock{state.mutex};
     if (state.initialized) {
       return logger_locked(state, category);
     }
@@ -242,19 +244,19 @@ std::shared_ptr<spdlog::logger> logger(log_category category) {
 
   initialize(logger_config{});
 
-  std::scoped_lock lock(state.mutex);
+  std::scoped_lock lock{state.mutex};
   return logger_locked(state, category);
 }
 
 std::shared_ptr<log_ring_buffer> ring_buffer() {
   auto& state = registry();
-  std::scoped_lock lock(state.mutex);
+  std::scoped_lock lock{state.mutex};
   return state.ring_buffer;
 }
 
 std::filesystem::path current_log_file() {
   auto& state = registry();
-  std::scoped_lock lock(state.mutex);
+  std::scoped_lock lock{state.mutex};
   return state.log_file;
 }
 
@@ -265,7 +267,7 @@ void set_level(log_level level) {
     initialize(logger_config{});
   }
 
-  std::scoped_lock lock(state.mutex);
+  std::scoped_lock lock{state.mutex};
 
   for (const auto& logger : state.loggers) {
     if (logger != nullptr) {
@@ -289,7 +291,7 @@ void flush() {
   std::array<std::shared_ptr<spdlog::logger>, category_count> loggers{};
 
   {
-    std::scoped_lock lock(state.mutex);
+    std::scoped_lock lock{state.mutex};
     loggers = state.loggers;
   }
 
@@ -299,4 +301,5 @@ void flush() {
     }
   }
 }
+
 }  // namespace rl::log

@@ -10,11 +10,10 @@
 #include "base/log.hpp"
 
 namespace rl::platform {
-using std::vector;
 
 namespace {
 [[nodiscard]] std::runtime_error make_sdl_error(std::string_view what) {
-  return std::runtime_error(std::string(what) + ": " + SDL_GetError());
+  return std::runtime_error{std::string{what} + ": " + SDL_GetError()};
 }
 }  // namespace
 
@@ -95,4 +94,5 @@ VkSurfaceKHR sdl_window::create_vulkan_surface(VkInstance instance) const {
   RL_PLATFORM_DEBUG("created SDL3 Vulkan surface");
   return surface;
 }
+
 }  // namespace rl::platform

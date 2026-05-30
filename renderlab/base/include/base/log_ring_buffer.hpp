@@ -10,6 +10,7 @@
 #include "base/log_level.hpp"
 
 namespace rl::log {
+
 struct log_entry {
   std::chrono::system_clock::time_point timestamp;
   log_level level = log_level::info;
@@ -43,4 +44,5 @@ class log_ring_buffer final {
   std::size_t next_ = 0;
   bool wrapped_ = false;
 };
+
 }  // namespace rl::log

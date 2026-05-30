@@ -5,6 +5,7 @@
 #include <spdlog/common.h>
 
 namespace rl::log {
+
 enum class log_level : std::uint8_t {
   trace,
   debug,
@@ -78,4 +79,5 @@ enum class log_level : std::uint8_t {
 
   return "unknown";
 }
+
 }  // namespace rl::log

@@ -15,6 +15,7 @@
 #include "base/log_ring_buffer.hpp"
 
 namespace rl::log {
+
 struct logger_config {
   std::string application_name = "renderlab";
 
@@ -80,6 +81,7 @@ void write(log_category log_category, log_level level, spdlog::source_loc source
 
   target_logger->log(source_location, to_spdlog(level), format, std::forward<Args>(args)...);
 }
+
 }  // namespace rl::log
 
 #define RL_LOG_TRACE(log_category, ...)                         \

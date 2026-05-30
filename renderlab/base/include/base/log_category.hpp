@@ -5,6 +5,7 @@
 #include <string_view>
 
 namespace rl::log {
+
 enum class log_category : std::uint8_t {
   core,
   app,
@@ -53,4 +54,5 @@ inline constexpr std::size_t category_count = static_cast<std::size_t>(log_categ
 
   return "unknown";
 }
+
 }  // namespace rl::log
