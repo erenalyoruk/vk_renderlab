@@ -1,4 +1,4 @@
-#include "renderlab/assets/file_io.hpp"
+#include "assets/file_io.hpp"
 
 #include <bit>
 #include <cstdlib>
@@ -9,7 +9,7 @@
 
 namespace rl::assets {
 namespace {
-constexpr std::string_view workspace_name = "vulkan_renderlab";
+constexpr std::string_view workspace_name = "vk_renderlab";
 
 [[nodiscard]] bool exists_regular_file(const std::filesystem::path& path) {
   std::error_code error;

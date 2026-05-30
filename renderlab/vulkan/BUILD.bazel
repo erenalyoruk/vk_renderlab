@@ -4,11 +4,13 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "vulkan",
-    srcs = ["vulkan_context.cpp"],
+    srcs = ["src/vulkan_context.cpp"],
     hdrs = [
-        "vk_check.hpp",
-        "vulkan_context.hpp",
+        "include/vk/vk_check.hpp",
+        "include/vk/vulkan_context.hpp",
     ],
+    includes = ["include"],
+    strip_include_prefix = "include",
     deps = [
         "//renderlab/base",
         "//renderlab/platform",

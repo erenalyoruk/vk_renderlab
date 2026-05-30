@@ -2,8 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
-#include "renderlab/base/noncopyable.hpp"
-#include "renderlab/platform/sdl_window.hpp"
+#include "base/noncopyable.hpp"
+#include "platform/sdl_window.hpp"
 
 namespace rl::vulkan {
 

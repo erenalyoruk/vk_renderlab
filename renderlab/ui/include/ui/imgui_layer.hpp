@@ -1,6 +1,6 @@
 #pragma once
 
-#include "renderlab/base/noncopyable.hpp"
+#include "base/noncopyable.hpp"
 
 namespace rl::ui {
 class imgui_layer final : public noncopyable {

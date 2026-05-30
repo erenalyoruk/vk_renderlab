@@ -4,10 +4,19 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "base",
-    srcs = ["log.cpp"],
-    hdrs = [
-        "log.hpp",
-        "noncopyable.hpp",
+    srcs = [
+        "src/log.cpp",
+        "src/log_ring_buffer.cpp",
     ],
+    hdrs = [
+        "include/base/assert.hpp",
+        "include/base/log.hpp",
+        "include/base/log_category.hpp",
+        "include/base/log_level.hpp",
+        "include/base/log_ring_buffer.hpp",
+        "include/base/noncopyable.hpp",
+    ],
+    includes = ["include"],
+    strip_include_prefix = "include",
     deps = ["@spdlog"],
 )

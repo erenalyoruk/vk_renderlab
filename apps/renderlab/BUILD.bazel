@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 cc_binary(
     name = "renderlab",
-    srcs = ["main.cpp"],
+    srcs = ["src/main.cpp"],
     data = ["//renderlab/shaders:runtime_shaders"],
     deps = [
         "//renderlab/assets",

@@ -7,7 +7,7 @@
 #include <SDL3/SDL.h>
 #include <vulkan/vulkan.h>
 
-#include "renderlab/base/noncopyable.hpp"
+#include "base/noncopyable.hpp"
 
 namespace rl::platform {
 struct window_config {
