@@ -15,6 +15,7 @@
 #include "base/log.hpp"
 #include "vk/device.hpp"
 #include "vk/frame_graph.hpp"
+#include "vk/render_path.hpp"
 #include "vk/vulkan_context.hpp"
 
 namespace rl::vulkan {
@@ -74,31 +75,6 @@ constexpr std::uint32_t max_frames_in_flight = 3;
   return image_count;
 }
 
-[[nodiscard]] vk::ImageSubresourceRange color_subresource_range() noexcept {
-  vk::ImageSubresourceRange result{};
-  result.aspectMask = vk::ImageAspectFlagBits::eColor;
-  result.baseMipLevel = 0;
-  result.levelCount = 1;
-  result.baseArrayLayer = 0;
-  result.layerCount = 1;
-  return result;
-}
-
-[[nodiscard]] vk::ImageMemoryBarrier2 make_color_layout_barrier(
-    vk::Image image, vk::ImageLayout old_layout, vk::ImageLayout new_layout, vk::PipelineStageFlags2 src_stage,
-    vk::AccessFlags2 src_access, vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) noexcept {
-  vk::ImageMemoryBarrier2 barrier{};
-  barrier.srcStageMask = src_stage;
-  barrier.srcAccessMask = src_access;
-  barrier.dstStageMask = dst_stage;
-  barrier.dstAccessMask = dst_access;
-  barrier.oldLayout = old_layout;
-  barrier.newLayout = new_layout;
-  barrier.image = image;
-  barrier.subresourceRange = color_subresource_range();
-  return barrier;
-}
-
 [[nodiscard]] vk::ImageViewCreateInfo make_swapchain_image_view_create_info(vk::Image image,
                                                                             vk::Format format) noexcept {
   vk::ImageViewCreateInfo create_info{};
@@ -109,7 +85,11 @@ constexpr std::uint32_t max_frames_in_flight = 3;
   create_info.components.g = vk::ComponentSwizzle::eIdentity;
   create_info.components.b = vk::ComponentSwizzle::eIdentity;
   create_info.components.a = vk::ComponentSwizzle::eIdentity;
-  create_info.subresourceRange = color_subresource_range();
+  create_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+  create_info.subresourceRange.baseMipLevel = 0;
+  create_info.subresourceRange.levelCount = 1;
+  create_info.subresourceRange.baseArrayLayer = 0;
+  create_info.subresourceRange.layerCount = 1;
   return create_info;
 }
 
@@ -347,65 +327,25 @@ void renderer::create_swapchain_image_views() {
 }
 
 void renderer::build_frame_graph(std::size_t image_index) {
-  const vk::Image image = swapchain_images_.at(image_index);
-  const vk::ImageView image_view = *swapchain_image_views_.at(image_index);
-  const vk::ImageLayout old_layout = image_layouts_.at(image_index);
+  const optional_device_features& optional_features = context_.device().optional_features();
 
-  frame_graph_.clear();
-  frame_graph_.import_resource(frame_graph_resource{
-    .name = "swapchain.color",
-    .type = frame_graph_resource_type::swapchain_image,
-  });
-
-  frame_graph_.add_pass(frame_graph_pass{
-    .name = "clear.swapchain",
-    .queue = frame_graph_queue::graphics,
-    .accesses =
-        {
-          frame_graph_access{
-            .resource = "swapchain.color",
-            .access = frame_graph_access_type::write,
-          },
-        },
-    .execute =
-        [this, image, image_view, old_layout](const frame_graph_context& graph_context) {
-          const vk::ImageMemoryBarrier2 to_color_attachment = make_color_layout_barrier(
-              image, old_layout, vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eNone,
-              vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-              vk::AccessFlagBits2::eColorAttachmentWrite);
-
-          vk::DependencyInfo to_color_attachment_dependency{};
-          to_color_attachment_dependency.setImageMemoryBarriers(to_color_attachment);
-          graph_context.command_buffer.get().pipelineBarrier2(to_color_attachment_dependency);
-
-          vk::RenderingAttachmentInfo color_attachment{};
-          color_attachment.imageView = image_view;
-          color_attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-          color_attachment.loadOp = vk::AttachmentLoadOp::eClear;
-          color_attachment.storeOp = vk::AttachmentStoreOp::eStore;
-          color_attachment.clearValue = vk::ClearValue{settings_.clear_color};
-
-          vk::RenderingInfo rendering_info{};
-          rendering_info.renderArea.offset = vk::Offset2D{0, 0};
-          rendering_info.renderArea.extent = swapchain_extent_;
-          rendering_info.layerCount = 1;
-          rendering_info.setColorAttachments(color_attachment);
-
-          graph_context.command_buffer.get().beginRendering(rendering_info);
-          graph_context.command_buffer.get().endRendering();
-
-          const vk::ImageMemoryBarrier2 to_present = make_color_layout_barrier(
-              image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
-              vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eColorAttachmentWrite,
-              vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone);
-
-          vk::DependencyInfo to_present_dependency{};
-          to_present_dependency.setImageMemoryBarriers(to_present);
-          graph_context.command_buffer.get().pipelineBarrier2(to_present_dependency);
-        },
-  });
-
-  frame_graph_.compile();
+  build_render_path_frame_graph(frame_graph_, render_path_build_info{
+                                                .path = settings_.path,
+                                                .capabilities =
+                                                    render_path_capabilities{
+                                                      .bindless_descriptors = true,
+                                                      .mesh_shader = optional_features.mesh_shader,
+                                                      .task_shader = optional_features.task_shader,
+                                                    },
+                                                .swapchain =
+                                                    render_path_swapchain_target{
+                                                      .image = swapchain_images_.at(image_index),
+                                                      .image_view = *swapchain_image_views_.at(image_index),
+                                                      .old_layout = image_layouts_.at(image_index),
+                                                      .extent = swapchain_extent_,
+                                                      .clear_color = settings_.clear_color,
+                                                    },
+                                              });
 }
 
 void renderer::record_frame_commands(frame_resources& frame, std::size_t image_index) {
@@ -491,19 +431,6 @@ void renderer::wait_device_idle() noexcept {
   } catch (const vk::Error& error) {
     RL_RENDER_ERROR("failed to wait for device idle: {}", error.what());
   }
-}
-
-std::string_view to_string(render_path path) noexcept {
-  switch (path) {
-    case render_path::forward:
-      return "forward";
-    case render_path::forward_plus:
-      return "forward_plus";
-    case render_path::deferred:
-      return "deferred";
-  }
-
-  return "unknown";
 }
 
 }  // namespace rl::vulkan

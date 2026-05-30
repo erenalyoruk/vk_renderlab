@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <string_view>
 #include <vector>
 
 #include <vulkan/vulkan_raii.hpp>
@@ -10,16 +9,11 @@
 #include "base/noncopyable.hpp"
 #include "platform/platform_event.hpp"
 #include "vk/frame_graph.hpp"
+#include "vk/render_path.hpp"
 
 namespace rl::vulkan {
 
 class vulkan_context;
-
-enum class render_path : std::uint8_t {
-  forward,
-  forward_plus,
-  deferred,
-};
 
 struct renderer_settings {
   vk::ClearColorValue clear_color{std::array{0.06f, 0.09f, 0.14f, 1.0f}};
@@ -105,7 +99,5 @@ class renderer final : public noncopyable {
   std::uint64_t frame_index_ = 0;
   bool suspended_ = false;
 };
-
-[[nodiscard]] std::string_view to_string(render_path path) noexcept;
 
 }  // namespace rl::vulkan
