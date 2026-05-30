@@ -2,20 +2,26 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <vulkan/vulkan_raii.hpp>
+
 #include "base/log.hpp"
 #include "platform/sdl_window.hpp"
+#include "vk/device.hpp"
+#include "vk/physical_device.hpp"
 
 namespace rl::vulkan {
 namespace {
 
-constexpr std::array<const char*, 1> validation_layers = {
+constexpr std::array<std::string_view, 1> validation_layers = {
   "VK_LAYER_KHRONOS_validation",
 };
 
@@ -36,14 +42,29 @@ template <typename FixedString>
   return std::to_string(*value);
 }
 
-[[nodiscard]] bool contains_c_string(const std::vector<const char*>& values, const char* value) {
-  return std::ranges::any_of(values, [&](const char* current) { return std::strcmp(current, value) == 0; });
+[[nodiscard]] bool contains_name(const std::vector<std::string>& values, std::string_view value) {
+  return std::ranges::any_of(values, [&](const std::string& current) { return current == value; });
 }
 
-void append_unique(std::vector<const char*>& values, const char* value) {
-  if (!contains_c_string(values, value)) {
-    values.push_back(value);
+void append_unique(std::vector<std::string>& values, std::string_view value) {
+  if (!contains_name(values, value)) {
+    values.emplace_back(value);
   }
+}
+
+[[nodiscard]] std::vector<const char*> to_vulkan_name_pointers(const std::vector<std::string>& names) {
+  std::vector<const char*> result;
+  result.reserve(names.size());
+
+  for (const std::string& name : names) {
+    result.push_back(name.c_str());
+  }
+
+  return result;
+}
+
+[[nodiscard]] std::string_view callback_text(const char* value, std::string_view fallback) noexcept {
+  return value == nullptr ? fallback : std::string_view{value};
 }
 
 [[nodiscard]] std::string debug_message_type_to_string(vk::DebugUtilsMessageTypeFlagsEXT message_type) {
@@ -82,11 +103,11 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL vulkan_debug_callback(vk::DebugUtilsMessageSeve
                                                        [[maybe_unused]] void* data) {
   const std::string type = debug_message_type_to_string(message_type);
 
-  const char* message_id =
-      callback_data != nullptr && callback_data->pMessageIdName != nullptr ? callback_data->pMessageIdName : "unknown";
+  const std::string_view message_id =
+      callback_data == nullptr ? "unknown" : callback_text(callback_data->pMessageIdName, "unknown");
 
-  const char* message =
-      callback_data != nullptr && callback_data->pMessage != nullptr ? callback_data->pMessage : "<no message>";
+  const std::string_view message =
+      callback_data == nullptr ? "<no message>" : callback_text(callback_data->pMessage, "<no message>");
 
   if (severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
     RL_VK_ERROR("validation [{}:{}]: {}", type, message_id, message);
@@ -139,33 +160,37 @@ const vk::raii::Instance& vulkan_context::instance() const noexcept { return ins
 
 const vk::raii::SurfaceKHR& vulkan_context::surface() const noexcept { return surface_; }
 
-const device& vulkan_context::device() const noexcept { return *device_; }
+const device& vulkan_context::device() const noexcept {
+  if (!device_.has_value()) {
+    std::terminate();
+  }
+
+  return *device_;
+}
 
 vk::Instance vulkan_context::raw_instance() const noexcept { return *instance_; }
 
 vk::SurfaceKHR vulkan_context::raw_surface() const noexcept { return *surface_; }
 
-vk::PhysicalDevice vulkan_context::physical_device() const noexcept {
+vk::PhysicalDevice vulkan_context::physical_device() const {
   if (physical_devices_.empty()) {
     return {};
   }
 
-  return physical_devices_[selected_physical_device_index_].handle;
+  return physical_devices_.at(selected_physical_device_index_).handle;
 }
 
-vk::PhysicalDevice vulkan_context::raw_physical_device() const noexcept { return physical_device(); }
+vk::PhysicalDevice vulkan_context::raw_physical_device() const { return physical_device(); }
 
-vk::Device vulkan_context::raw_device() const noexcept { return device_->raw_handle(); }
+vk::Device vulkan_context::raw_device() const noexcept { return device().raw_handle(); }
 
 VkInstance vulkan_context::c_instance() const noexcept { return static_cast<VkInstance>(*instance_); }
 
 VkSurfaceKHR vulkan_context::c_surface() const noexcept { return static_cast<VkSurfaceKHR>(*surface_); }
 
-VkPhysicalDevice vulkan_context::c_physical_device() const noexcept {
-  return static_cast<VkPhysicalDevice>(physical_device());
-}
+VkPhysicalDevice vulkan_context::c_physical_device() const { return static_cast<VkPhysicalDevice>(physical_device()); }
 
-VkDevice vulkan_context::c_device() const noexcept { return device_->c_handle(); }
+VkDevice vulkan_context::c_device() const noexcept { return device().c_handle(); }
 
 const std::vector<physical_device_info>& vulkan_context::physical_devices() const noexcept { return physical_devices_; }
 
@@ -178,7 +203,7 @@ const vk::raii::PhysicalDevice& vulkan_context::selected_physical_device_handle(
     throw std::runtime_error{"physical devices have not been enumerated"};
   }
 
-  return (*physical_device_handles_)[selected_physical_device_index_];
+  return physical_device_handles_->at(selected_physical_device_index_);
 }
 
 std::size_t vulkan_context::selected_physical_device_index() const noexcept { return selected_physical_device_index_; }
@@ -186,7 +211,7 @@ std::size_t vulkan_context::selected_physical_device_index() const noexcept { re
 bool vulkan_context::validation_layers_available() const {
   const std::vector<vk::LayerProperties> available_layers = context_.enumerateInstanceLayerProperties();
 
-  for (const char* required_layer : validation_layers) {
+  for (std::string_view required_layer : validation_layers) {
     const bool found = std::ranges::any_of(available_layers, [&](const vk::LayerProperties& layer) {
       return copy_fixed_c_string(layer.layerName) == required_layer;
     });
@@ -199,7 +224,7 @@ bool vulkan_context::validation_layers_available() const {
   return true;
 }
 
-bool vulkan_context::instance_extension_available(const char* extension_name) const {
+bool vulkan_context::instance_extension_available(std::string_view extension_name) const {
   const std::vector<vk::ExtensionProperties> extensions = context_.enumerateInstanceExtensionProperties();
 
   return std::ranges::any_of(extensions, [&](const vk::ExtensionProperties& extension) {
@@ -225,7 +250,7 @@ void vulkan_context::create_instance([[maybe_unused]] const platform::sdl_window
     RL_VK_WARN("validation requested but VK_LAYER_KHRONOS_validation is not available");
   }
 
-  std::vector<const char*> extensions = platform::sdl_window::required_vulkan_extensions();
+  std::vector<std::string> extensions = platform::sdl_window::required_vulkan_extensions();
 
   if (validation_enabled_) {
     debug_utils_enabled_ = instance_extension_available(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -237,10 +262,14 @@ void vulkan_context::create_instance([[maybe_unused]] const platform::sdl_window
     }
   }
 
-  std::vector<const char*> enabled_layers;
+  std::vector<std::string> enabled_layers;
 
   if (validation_enabled_) {
-    enabled_layers.assign(validation_layers.begin(), validation_layers.end());
+    enabled_layers.reserve(validation_layers.size());
+
+    for (const std::string_view layer : validation_layers) {
+      enabled_layers.emplace_back(layer);
+    }
   }
 
   const std::uint32_t requested_api_version =
@@ -256,21 +285,22 @@ void vulkan_context::create_instance([[maybe_unused]] const platform::sdl_window
   RL_VK_INFO("requested Vulkan API version: {}", api_version_to_string(app_info.apiVersion));
 
   for (std::size_t index = 0; index < extensions.size(); ++index) {
-    RL_VK_TRACE("instance extension[{}]: {}", index, extensions[index]);
+    RL_VK_TRACE("instance extension[{}]: {}", index, extensions.at(index));
   }
 
   for (std::size_t index = 0; index < enabled_layers.size(); ++index) {
-    RL_VK_TRACE("instance layer[{}]: {}", index, enabled_layers[index]);
+    RL_VK_TRACE("instance layer[{}]: {}", index, enabled_layers.at(index));
   }
+
+  const std::vector<const char*> extension_names = to_vulkan_name_pointers(extensions);
+  const std::vector<const char*> layer_names = to_vulkan_name_pointers(enabled_layers);
 
   vk::DebugUtilsMessengerCreateInfoEXT debug_create_info{};
 
   vk::InstanceCreateInfo create_info{};
   create_info.pApplicationInfo = &app_info;
-  create_info.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size());
-  create_info.ppEnabledExtensionNames = extensions.data();
-  create_info.enabledLayerCount = static_cast<std::uint32_t>(enabled_layers.size());
-  create_info.ppEnabledLayerNames = enabled_layers.data();
+  create_info.setPEnabledExtensionNames(extension_names);
+  create_info.setPEnabledLayerNames(layer_names);
 
   if (debug_utils_enabled_) {
     debug_create_info = make_debug_messenger_create_info();
@@ -318,7 +348,7 @@ void vulkan_context::enumerate_and_select_physical_device() {
   RL_GPU_INFO("found {} Vulkan physical device(s)", physical_devices_.size());
 
   for (std::size_t index = 0; index < physical_devices_.size(); ++index) {
-    const physical_device_info& device = physical_devices_[index];
+    const physical_device_info& device = physical_devices_.at(index);
 
     const std::uint64_t local_memory_mib = device_local_memory_bytes(device.memory_properties) / (1024ULL * 1024ULL);
 
@@ -367,7 +397,7 @@ void vulkan_context::enumerate_and_select_physical_device() {
 
     if (preferred >= physical_devices_.size()) {
       RL_GPU_WARN("preferred GPU index {} is out of range; falling back to configured selection", preferred);
-    } else if (!physical_devices_[preferred].suitable) {
+    } else if (!physical_devices_.at(preferred).suitable) {
       RL_GPU_WARN("preferred GPU index {} is unsuitable; falling back to configured selection", preferred);
     }
   }
@@ -381,7 +411,7 @@ void vulkan_context::enumerate_and_select_physical_device() {
 
   selected_physical_device_index_ = *selected_index;
 
-  const physical_device_info& selected = physical_devices_[selected_physical_device_index_];
+  const physical_device_info& selected = physical_devices_.at(selected_physical_device_index_);
 
   RL_GPU_INFO("selected GPU[{}]: '{}'", selected_physical_device_index_, physical_device_name(selected.properties));
 }

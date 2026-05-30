@@ -76,7 +76,7 @@ struct device_requirements {
   bool require_bindless_descriptors = true;
   bool require_buffer_device_address = true;
 
-  std::vector<const char*> required_extensions = {
+  std::vector<std::string> required_extensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
   };
 };
@@ -91,7 +91,7 @@ struct physical_device_info {
   optional_device_features optional_features{};
 
   std::vector<std::string> extensions;
-  std::vector<const char*> enabled_extensions;
+  std::vector<std::string> enabled_extensions;
   std::vector<queue_family_info> queue_families;
   queue_family_indices selected_queues{};
 

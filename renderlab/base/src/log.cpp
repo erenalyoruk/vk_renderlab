@@ -49,6 +49,8 @@ class ring_buffer_sink final : public spdlog::sinks::base_sink<std::mutex> {
   void flush_() override {}
 
  private:
+  std::shared_ptr<log_ring_buffer> buffer_;
+
   [[nodiscard]] static std::string copy_string_view(spdlog::string_view_t view) {
     if (view.size() == 0) {
       return {};
@@ -56,8 +58,6 @@ class ring_buffer_sink final : public spdlog::sinks::base_sink<std::mutex> {
 
     return {view.data(), view.size()};
   }
-
-  std::shared_ptr<log_ring_buffer> buffer_;
 };
 
 struct registry {

@@ -1,9 +1,14 @@
 #include "vk/physical_device.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
+
+#include <vulkan/vulkan_raii.hpp>
 
 namespace rl::vulkan {
 namespace {
@@ -25,19 +30,14 @@ template <typename FixedString>
   return std::ranges::any_of(extensions, [&](const std::string& extension) { return extension == required_extension; });
 }
 
-[[nodiscard]] bool contains_enabled_extension(const std::vector<const char*>& extensions,
-                                              std::string_view required_extension) {
-  return std::ranges::any_of(extensions, [&](const char* extension) { return extension == required_extension; });
-}
-
-void append_enabled_extension(physical_device_info& info, const char* extension) {
-  if (!contains_enabled_extension(info.enabled_extensions, extension)) {
-    info.enabled_extensions.push_back(extension);
+void append_enabled_extension(physical_device_info& info, std::string_view extension) {
+  if (!contains_extension(info.enabled_extensions, extension)) {
+    info.enabled_extensions.emplace_back(extension);
   }
 }
 
-void append_extension_with_dependencies(physical_device_info& info, const char* extension) {
-  if (std::string_view{extension} == VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME) {
+void append_extension_with_dependencies(physical_device_info& info, std::string_view extension) {
+  if (extension == VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME) {
     append_enabled_extension(info, VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
   }
 
@@ -105,7 +105,7 @@ void append_extension_with_dependencies(physical_device_info& info, const char* 
   for (std::uint32_t index = 0; index < properties.size(); ++index) {
     bool present_supported = false;
 
-    if (static_cast<VkSurfaceKHR>(surface) != VK_NULL_HANDLE) {
+    if (surface) {
       present_supported = static_cast<bool>(device.getSurfaceSupportKHR(index, surface));
     }
 
@@ -166,7 +166,7 @@ template <typename Predicate>
 
 [[nodiscard]] bool query_swapchain_adequate(const vk::raii::PhysicalDevice& device, vk::SurfaceKHR surface,
                                             const std::vector<std::string>& extensions) {
-  if (static_cast<VkSurfaceKHR>(surface) == VK_NULL_HANDLE) {
+  if (!surface) {
     return false;
   }
 
@@ -222,7 +222,7 @@ void populate_enabled_extensions(physical_device_info& info, const device_requir
   info.enabled_extensions.clear();
   info.enabled_extensions.reserve(requirements.required_extensions.size() + 5);
 
-  for (const char* required_extension : requirements.required_extensions) {
+  for (const std::string& required_extension : requirements.required_extensions) {
     append_extension_with_dependencies(info, required_extension);
   }
 
@@ -269,12 +269,12 @@ void collect_queue_requirements(const physical_device_info& info, const device_r
 
 void collect_extension_requirements(const physical_device_info& info, const device_requirements& requirements,
                                     std::vector<std::string>& missing) {
-  for (const char* required_extension : requirements.required_extensions) {
+  for (const std::string& required_extension : requirements.required_extensions) {
     if (!contains_extension(info.extensions, required_extension)) {
       missing.emplace_back(std::string{"missing device extension: "} + required_extension);
     }
 
-    if (std::string_view{required_extension} == VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME &&
+    if (required_extension == VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME &&
         !contains_extension(info.extensions, VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME)) {
       missing.emplace_back(std::string{"missing device extension dependency: "} +
                            VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);

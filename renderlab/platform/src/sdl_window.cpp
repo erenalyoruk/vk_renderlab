@@ -12,41 +12,46 @@
 namespace rl::platform {
 
 namespace {
+
 [[nodiscard]] std::runtime_error make_sdl_error(std::string_view what) {
   return std::runtime_error{std::string{what} + ": " + SDL_GetError()};
 }
+
 }  // namespace
+
+sdl_video_session::sdl_video_session() {
+  if (!SDL_Init(SDL_INIT_VIDEO)) {
+    throw make_sdl_error("SDL_Init(SDL_INIT_VIDEO) failed");
+  }
+
+  RL_PLATFORM_DEBUG("SDL3 video subsystem initialized");
+}
+
+sdl_video_session::~sdl_video_session() noexcept {
+  RL_PLATFORM_DEBUG("shutting down SDL3");
+  SDL_Quit();
+}
+
+void sdl_window_deleter::operator()(SDL_Window* window) const noexcept {
+  if (window == nullptr) {
+    return;
+  }
+
+  RL_PLATFORM_DEBUG("destroying SDL3 window");
+  SDL_DestroyWindow(window);
+}
 
 sdl_window::sdl_window(const window_config& config) {
   RL_PLATFORM_INFO("creating SDL3 window: title='{}', width={}, height={}", config.title, config.width, config.height);
 
-  if (!SDL_Init(SDL_INIT_VIDEO)) {
-    throw make_sdl_error("SDL_Init(SDL_INIT_VIDEO) failed");
-  }
-  sdl_initialized_ = true;
+  window_.reset(
+      SDL_CreateWindow(config.title.c_str(), config.width, config.height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE));
 
-  window_ =
-      SDL_CreateWindow(config.title.c_str(), config.width, config.height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-
-  if (window_ == nullptr) {
+  if (!window_) {
     throw make_sdl_error("SDL_CreateWindow failed");
   }
 
   RL_PLATFORM_INFO("SDL3 window created");
-}
-
-sdl_window::~sdl_window() noexcept {
-  if (window_ != nullptr) {
-    RL_PLATFORM_DEBUG("destroying SDL3 window");
-    SDL_DestroyWindow(window_);
-    window_ = nullptr;
-  }
-
-  if (sdl_initialized_) {
-    RL_PLATFORM_DEBUG("shutting down SDL3");
-    SDL_Quit();
-    sdl_initialized_ = false;
-  }
 }
 
 bool sdl_window::poll_events() const {
@@ -63,9 +68,9 @@ bool sdl_window::poll_events() const {
   return false;
 }
 
-SDL_Window* sdl_window::native_handle() const noexcept { return window_; }
+SDL_Window* sdl_window::native_handle() const noexcept { return window_.get(); }
 
-std::vector<const char*> sdl_window::required_vulkan_extensions() {
+std::vector<std::string> sdl_window::required_vulkan_extensions() {
   Uint32 extension_count = 0;
   const char* const* extension_names = SDL_Vulkan_GetInstanceExtensions(&extension_count);
 
@@ -82,12 +87,19 @@ std::vector<const char*> sdl_window::required_vulkan_extensions() {
     RL_PLATFORM_TRACE("required Vulkan extension[{}]: {}", index++, extension);
   }
 
-  return {extensions.begin(), extensions.end()};
+  std::vector<std::string> result;
+  result.reserve(extensions.size());
+
+  for (const char* extension : extensions) {
+    result.emplace_back(extension);
+  }
+
+  return result;
 }
 
 VkSurfaceKHR sdl_window::create_vulkan_surface(VkInstance instance) const {
   VkSurfaceKHR surface = VK_NULL_HANDLE;
-  if (!SDL_Vulkan_CreateSurface(window_, instance, nullptr, &surface)) {
+  if (!SDL_Vulkan_CreateSurface(window_.get(), instance, nullptr, &surface)) {
     throw make_sdl_error("SDL_Vulkan_CreateSurface failed");
   }
 

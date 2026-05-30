@@ -1,27 +1,44 @@
 #include "vk/device.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
+#include <vulkan/vulkan_raii.hpp>
+
 #include "base/log.hpp"
+#include "vk/physical_device.hpp"
 
 namespace rl::vulkan {
 
 namespace {
 
-template <typename VkStruct>
-void append_pnext(void** tail, VkStruct& next) noexcept {
-  *tail = &next;
-  tail = &next.pNext;
+using device_feature_chain =
+    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
+                       vk::PhysicalDeviceVulkan12Features, vk::PhysicalDeviceVulkan13Features,
+                       vk::PhysicalDeviceDescriptorBufferFeaturesEXT,
+                       vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT, vk::PhysicalDeviceMeshShaderFeaturesEXT>;
+
+[[nodiscard]] bool extension_enabled(const physical_device_info& physical_device, std::string_view extension_name) {
+  return std::ranges::any_of(physical_device.enabled_extensions,
+                             [&](const std::string& enabled_extension) { return enabled_extension == extension_name; });
 }
 
-[[nodiscard]] bool extension_enabled(const physical_device_info& physical_device, const char* extension_name) {
-  return std::ranges::any_of(physical_device.enabled_extensions, [&](const char* enabled_extension) {
-    return std::string_view{enabled_extension} == extension_name;
-  });
+[[nodiscard]] std::vector<const char*> to_vulkan_name_pointers(const std::vector<std::string>& names) {
+  std::vector<const char*> result;
+  result.reserve(names.size());
+
+  for (const std::string& name : names) {
+    result.push_back(name.c_str());
+  }
+
+  return result;
 }
 
 }  // namespace
@@ -31,24 +48,31 @@ device::device(const vk::raii::PhysicalDevice& physical_device_handle, const phy
     : queues_{physical_device.selected_queues}, optional_features_{physical_device.optional_features} {
   RL_VK_INFO("creating Vulkan logical device for '{}'", physical_device_name(physical_device.properties));
 
-  constexpr float queue_priority = 1.0f;
+  constexpr std::array queue_priorities = {1.0f};
   std::vector<vk::DeviceQueueCreateInfo> queue_create_infos;
   queue_create_infos.reserve(queues_.unique_families().size());
 
   for (const std::uint32_t queue_family : queues_.unique_families()) {
     vk::DeviceQueueCreateInfo queue_create_info{};
     queue_create_info.queueFamilyIndex = queue_family;
-    queue_create_info.queueCount = 1;
-    queue_create_info.pQueuePriorities = &queue_priority;
+    queue_create_info.setQueuePriorities(queue_priorities);
     queue_create_infos.push_back(queue_create_info);
   }
 
-  vk::PhysicalDeviceVulkan11Features vulkan11_features{};
+  device_feature_chain feature_chain{};
+
+  auto& enabled_features = feature_chain.get<vk::PhysicalDeviceFeatures2>();
+  auto& vulkan11_features = feature_chain.get<vk::PhysicalDeviceVulkan11Features>();
+  auto& vulkan12_features = feature_chain.get<vk::PhysicalDeviceVulkan12Features>();
+  auto& vulkan13_features = feature_chain.get<vk::PhysicalDeviceVulkan13Features>();
+  auto& descriptor_buffer_features = feature_chain.get<vk::PhysicalDeviceDescriptorBufferFeaturesEXT>();
+  auto& graphics_pipeline_library_features = feature_chain.get<vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT>();
+  auto& mesh_shader_features = feature_chain.get<vk::PhysicalDeviceMeshShaderFeaturesEXT>();
+
   vulkan11_features.shaderDrawParameters =
-      static_cast<vk::Bool32>(static_cast<uint32_t>(requirements.require_shader_draw_parameters) == vk::True ||
+      static_cast<vk::Bool32>(requirements.require_shader_draw_parameters ||
                               physical_device.features.vulkan11.shaderDrawParameters == vk::True);
 
-  vk::PhysicalDeviceVulkan12Features vulkan12_features{};
   vulkan12_features.timelineSemaphore = static_cast<vk::Bool32>(requirements.require_timeline_semaphore);
   vulkan12_features.bufferDeviceAddress = static_cast<vk::Bool32>(requirements.require_buffer_device_address);
   vulkan12_features.descriptorIndexing = static_cast<vk::Bool32>(requirements.require_descriptor_indexing);
@@ -66,65 +90,55 @@ device::device(const vk::raii::PhysicalDevice& physical_device_handle, const phy
   vulkan12_features.scalarBlockLayout = static_cast<vk::Bool32>(physical_device.optional_features.scalar_block_layout);
   vulkan12_features.hostQueryReset = static_cast<vk::Bool32>(physical_device.optional_features.host_query_reset);
 
-  vk::PhysicalDeviceVulkan13Features vulkan13_features{};
   vulkan13_features.dynamicRendering = static_cast<vk::Bool32>(requirements.require_dynamic_rendering);
   vulkan13_features.synchronization2 = static_cast<vk::Bool32>(requirements.require_synchronization2);
   vulkan13_features.maintenance4 = static_cast<vk::Bool32>(physical_device.features.vulkan13.maintenance4 == vk::True);
 
-  vk::PhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features{};
   descriptor_buffer_features.descriptorBuffer =
       static_cast<vk::Bool32>(physical_device.optional_features.descriptor_buffer);
 
-  vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT graphics_pipeline_library_features{};
   graphics_pipeline_library_features.graphicsPipelineLibrary =
       static_cast<vk::Bool32>(physical_device.optional_features.graphics_pipeline_library);
 
-  vk::PhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features{};
   mesh_shader_features.meshShader = static_cast<vk::Bool32>(physical_device.optional_features.mesh_shader);
   mesh_shader_features.taskShader = static_cast<vk::Bool32>(physical_device.optional_features.task_shader);
 
-  vk::PhysicalDeviceFeatures2 enabled_features{};
   enabled_features.features.samplerAnisotropy = static_cast<vk::Bool32>(requirements.require_sampler_anisotropy);
   enabled_features.features.drawIndirectFirstInstance = physical_device.features.core.drawIndirectFirstInstance;
   enabled_features.features.multiDrawIndirect =
       static_cast<vk::Bool32>(physical_device.optional_features.multi_draw_indirect);
 
-  void** tail = &enabled_features.pNext;
-  append_pnext(tail, vulkan11_features);
-  tail = &vulkan11_features.pNext;
-  append_pnext(tail, vulkan12_features);
-  tail = &vulkan12_features.pNext;
-  append_pnext(tail, vulkan13_features);
-  tail = &vulkan13_features.pNext;
-
-  if (extension_enabled(physical_device, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)) {
-    append_pnext(tail, descriptor_buffer_features);
-    tail = &descriptor_buffer_features.pNext;
+  if (!extension_enabled(physical_device, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)) {
+    feature_chain.unlink<vk::PhysicalDeviceDescriptorBufferFeaturesEXT>();
   }
 
-  if (extension_enabled(physical_device, VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME)) {
-    append_pnext(tail, graphics_pipeline_library_features);
-    tail = &graphics_pipeline_library_features.pNext;
+  if (!extension_enabled(physical_device, VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME)) {
+    feature_chain.unlink<vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT>();
   }
 
-  if (extension_enabled(physical_device, VK_EXT_MESH_SHADER_EXTENSION_NAME)) {
-    append_pnext(tail, mesh_shader_features);
+  if (!extension_enabled(physical_device, VK_EXT_MESH_SHADER_EXTENSION_NAME)) {
+    feature_chain.unlink<vk::PhysicalDeviceMeshShaderFeaturesEXT>();
   }
 
   for (std::size_t index = 0; index < physical_device.enabled_extensions.size(); ++index) {
-    RL_VK_TRACE("device extension[{}]: {}", index, physical_device.enabled_extensions[index]);
+    RL_VK_TRACE("device extension[{}]: {}", index, physical_device.enabled_extensions.at(index));
   }
+
+  const std::vector<const char*> enabled_extension_names = to_vulkan_name_pointers(physical_device.enabled_extensions);
 
   vk::DeviceCreateInfo create_info{};
   create_info.pNext = &enabled_features;
-  create_info.queueCreateInfoCount = static_cast<std::uint32_t>(queue_create_infos.size());
-  create_info.pQueueCreateInfos = queue_create_infos.data();
-  create_info.enabledExtensionCount = static_cast<std::uint32_t>(physical_device.enabled_extensions.size());
-  create_info.ppEnabledExtensionNames = physical_device.enabled_extensions.data();
+  create_info.setQueueCreateInfos(queue_create_infos);
+  create_info.setPEnabledExtensionNames(enabled_extension_names);
 
   handle_ = vk::raii::Device{physical_device_handle, create_info};
-  graphics_queue_ = vk::raii::Queue{handle_, *queues_.graphics, 0};
-  present_queue_ = vk::raii::Queue{handle_, *queues_.present, 0};
+
+  if (!queues_.graphics.has_value() || !queues_.present.has_value()) {
+    throw std::runtime_error{"logical device requires graphics and present queue families"};
+  }
+
+  graphics_queue_ = vk::raii::Queue{handle_, queues_.graphics.value(), 0};
+  present_queue_ = vk::raii::Queue{handle_, queues_.present.value(), 0};
 
   if (queues_.compute.has_value()) {
     compute_queue_.emplace(handle_, *queues_.compute, 0);

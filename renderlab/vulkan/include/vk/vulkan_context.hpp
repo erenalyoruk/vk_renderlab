@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include <vulkan/vulkan_raii.hpp>
@@ -38,13 +39,13 @@ class vulkan_context final : public noncopyable {
 
   [[nodiscard]] vk::Instance raw_instance() const noexcept;
   [[nodiscard]] vk::SurfaceKHR raw_surface() const noexcept;
-  [[nodiscard]] vk::PhysicalDevice physical_device() const noexcept;
-  [[nodiscard]] vk::PhysicalDevice raw_physical_device() const noexcept;
+  [[nodiscard]] vk::PhysicalDevice physical_device() const;
+  [[nodiscard]] vk::PhysicalDevice raw_physical_device() const;
   [[nodiscard]] vk::Device raw_device() const noexcept;
 
   [[nodiscard]] VkInstance c_instance() const noexcept;
   [[nodiscard]] VkSurfaceKHR c_surface() const noexcept;
-  [[nodiscard]] VkPhysicalDevice c_physical_device() const noexcept;
+  [[nodiscard]] VkPhysicalDevice c_physical_device() const;
   [[nodiscard]] VkDevice c_device() const noexcept;
 
   [[nodiscard]] const std::vector<physical_device_info>& physical_devices() const noexcept;
@@ -53,15 +54,6 @@ class vulkan_context final : public noncopyable {
   [[nodiscard]] std::size_t selected_physical_device_index() const noexcept;
 
  private:
-  void create_instance(const platform::sdl_window& window);
-  void create_debug_messenger();
-  void create_surface(const platform::sdl_window& window);
-  void enumerate_and_select_physical_device();
-  void create_logical_device();
-
-  [[nodiscard]] bool validation_layers_available() const;
-  [[nodiscard]] bool instance_extension_available(const char* extension_name) const;
-
   vulkan_context_config config_{};
 
   bool validation_enabled_ = false;
@@ -77,6 +69,15 @@ class vulkan_context final : public noncopyable {
   std::size_t selected_physical_device_index_ = 0;
 
   std::optional<rl::vulkan::device> device_;
+
+  void create_instance(const platform::sdl_window& window);
+  void create_debug_messenger();
+  void create_surface(const platform::sdl_window& window);
+  void enumerate_and_select_physical_device();
+  void create_logical_device();
+
+  [[nodiscard]] bool validation_layers_available() const;
+  [[nodiscard]] bool instance_extension_available(std::string_view extension_name) const;
 };
 
 }  // namespace rl::vulkan
