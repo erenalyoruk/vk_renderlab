@@ -1,18 +1,26 @@
 #include <chrono>
 #include <cstdlib>
 #include <exception>
+#include <string>
+#include <string_view>
 #include <thread>
+#include <variant>
 #include <vector>
 
 #include "assets/file_io.hpp"
 #include "base/log.hpp"
 #include "base/log_level.hpp"
+#include "platform/event_dispatcher.hpp"
+#include "platform/input_action.hpp"
 #include "platform/platform_event.hpp"
 #include "platform/sdl_window.hpp"
 #include "ui/imgui_layer.hpp"
 #include "vk/vulkan_context.hpp"
 
 namespace {
+constexpr std::string_view quit_action = "app.quit";
+constexpr std::string_view save_scene_action = "scene.save";
+
 [[nodiscard]] rl::log::logger_config make_logger_config() {
   rl::log::logger_config config;
 
@@ -36,6 +44,98 @@ namespace {
   config.async = false;
 
   return config;
+}
+
+void log_drawable_resize(const rl::platform::platform_event& event) {
+  const auto* resize = std::get_if<rl::platform::window_extent_event>(&event.payload);
+  if (resize == nullptr) {
+    return;
+  }
+
+  RL_RENDER_INFO("drawable resize queued for swapchain: {}x{}", resize->size.width, resize->size.height);
+}
+
+void suspend_renderer(bool& renderer_suspended) {
+  renderer_suspended = true;
+  RL_RENDER_INFO("renderer suspended while the window is minimized");
+}
+
+void resume_renderer(bool& renderer_suspended) {
+  renderer_suspended = false;
+  RL_RENDER_INFO("renderer resumed after window restore");
+}
+
+void register_event_listeners(rl::platform::event_dispatcher& event_dispatcher, bool& renderer_suspended) {
+  event_dispatcher.subscribe(rl::platform::platform_event_type::drawable_resized, log_drawable_resize);
+
+  event_dispatcher.subscribe(
+      rl::platform::platform_event_type::window_minimized,
+      [&renderer_suspended](const rl::platform::platform_event&) { suspend_renderer(renderer_suspended); });
+
+  event_dispatcher.subscribe(
+      rl::platform::platform_event_type::window_restored,
+      [&renderer_suspended](const rl::platform::platform_event&) { resume_renderer(renderer_suspended); });
+}
+
+[[nodiscard]] rl::platform::input_action_map make_input_action_map() {
+  rl::platform::input_action_map input_actions;
+
+  input_actions.push_layer(rl::platform::input_action_layer{
+    .name = "global",
+    .enabled = true,
+    .key_bindings =
+        {
+          rl::platform::key_binding{
+            .action = std::string{quit_action},
+            .key_code = rl::platform::key::escape,
+          },
+          rl::platform::key_binding{
+            .action = std::string{save_scene_action},
+            .key_code = rl::platform::key::s,
+            .modifiers =
+                {
+                  .ctrl = true,
+                },
+          },
+        },
+  });
+
+  return input_actions;
+}
+
+[[nodiscard]] bool action_pressed(const rl::platform::input_action_event& action, std::string_view action_name) {
+  return action.action == action_name && action.phase == rl::platform::input_action_phase::pressed;
+}
+
+void process_action(const rl::platform::input_action_event& action, bool& running) {
+  if (action_pressed(action, quit_action)) {
+    running = false;
+    return;
+  }
+
+  if (action_pressed(action, save_scene_action)) {
+    RL_APP_INFO("scene save action triggered");
+  }
+}
+
+void process_platform_events(const std::vector<rl::platform::platform_event>& events,
+                             rl::platform::input_state& input_state,
+                             const rl::platform::event_dispatcher& event_dispatcher,
+                             const rl::platform::input_action_map& input_actions, bool& running) {
+  for (const rl::platform::platform_event& event : events) {
+    input_state.apply(event);
+    event_dispatcher.dispatch(event);
+
+    const std::vector<rl::platform::input_action_event> actions = input_actions.translate(event);
+    for (const rl::platform::input_action_event& action : actions) {
+      process_action(action, running);
+    }
+  }
+}
+
+void sleep_until_next_frame(bool renderer_suspended) {
+  const auto sleep_duration = renderer_suspended ? std::chrono::milliseconds{32} : std::chrono::milliseconds{8};
+  std::this_thread::sleep_for(sleep_duration);
 }
 }  // namespace
 
@@ -68,17 +168,20 @@ int main() {
     RL_APP_INFO("bootstrap complete");
 
     rl::platform::input_state input_state;
+    rl::platform::event_dispatcher event_dispatcher;
+    const rl::platform::input_action_map input_actions = make_input_action_map();
 
-    while (!window.state().close_requested) {
+    bool running = true;
+    bool renderer_suspended = window.state().minimized;
+    register_event_listeners(event_dispatcher, renderer_suspended);
+
+    while (running && !window.state().close_requested) {
       const std::vector<rl::platform::platform_event> events = window.poll_events();
-
-      for (const rl::platform::platform_event& event : events) {
-        input_state.apply(event);
-      }
+      process_platform_events(events, input_state, event_dispatcher, input_actions, running);
 
       // Placeholder loop. The next milestone will acquire a swapchain image, record a
       // command buffer and present a clear color.
-      std::this_thread::sleep_for(std::chrono::milliseconds(8));
+      sleep_until_next_frame(renderer_suspended);
     }
 
     RL_APP_INFO("main loop exited");
