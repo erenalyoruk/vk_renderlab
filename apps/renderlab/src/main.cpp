@@ -15,7 +15,7 @@
 #include "platform/platform_event.hpp"
 #include "platform/sdl_window.hpp"
 #include "ui/imgui_layer.hpp"
-#include "vk/clear_renderer.hpp"
+#include "vk/renderer.hpp"
 #include "vk/vulkan_context.hpp"
 
 namespace {
@@ -56,26 +56,10 @@ void log_drawable_resize(const rl::platform::platform_event& event) {
   RL_RENDER_INFO("drawable resize queued for swapchain: {}x{}", resize->size.width, resize->size.height);
 }
 
-void suspend_renderer(bool& renderer_suspended) {
-  renderer_suspended = true;
-  RL_RENDER_INFO("renderer suspended while the window is minimized");
-}
-
-void resume_renderer(bool& renderer_suspended) {
-  renderer_suspended = false;
-  RL_RENDER_INFO("renderer resumed after window restore");
-}
-
-void register_event_listeners(rl::platform::event_dispatcher& event_dispatcher, bool& renderer_suspended) {
+void register_event_listeners(rl::platform::event_dispatcher& event_dispatcher, rl::vulkan::renderer& renderer) {
   event_dispatcher.subscribe(rl::platform::platform_event_type::drawable_resized, log_drawable_resize);
-
-  event_dispatcher.subscribe(
-      rl::platform::platform_event_type::window_minimized,
-      [&renderer_suspended](const rl::platform::platform_event&) { suspend_renderer(renderer_suspended); });
-
-  event_dispatcher.subscribe(
-      rl::platform::platform_event_type::window_restored,
-      [&renderer_suspended](const rl::platform::platform_event&) { resume_renderer(renderer_suspended); });
+  event_dispatcher.subscribe_all(
+      [&renderer](const rl::platform::platform_event& event) { renderer.handle_event(event); });
 }
 
 [[nodiscard]] rl::platform::input_action_map make_input_action_map() {
@@ -155,7 +139,7 @@ int main() {
     });
 
     const rl::vulkan::vulkan_context vulkan_context{window};
-    rl::vulkan::clear_renderer renderer{vulkan_context, window.state().drawable_size};
+    rl::vulkan::renderer renderer{vulkan_context, window.state().drawable_size};
     const rl::ui::imgui_layer imgui_layer;
 
     const auto vertex_shader_path = rl::assets::resolve_runfile("renderlab/shaders/triangle.vert.spv");
@@ -175,8 +159,8 @@ int main() {
     const rl::platform::input_action_map input_actions = make_input_action_map();
 
     bool running = true;
-    bool renderer_suspended = window.state().minimized;
-    register_event_listeners(event_dispatcher, renderer_suspended);
+    renderer.set_suspended(window.state().minimized);
+    register_event_listeners(event_dispatcher, renderer);
 
     window.show();
     RL_APP_INFO("entering main loop");
@@ -184,10 +168,9 @@ int main() {
     while (running && !window.state().close_requested) {
       const std::vector<rl::platform::platform_event> events = window.poll_events();
       process_platform_events(events, input_state, event_dispatcher, input_actions, running);
-      renderer.resize(window.state().drawable_size);
 
-      if (renderer_suspended) {
-        sleep_until_next_frame(renderer_suspended);
+      if (renderer.suspended()) {
+        sleep_until_next_frame(renderer.suspended());
       } else {
         renderer.draw_frame();
       }
