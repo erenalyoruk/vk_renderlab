@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include <vulkan/vulkan_raii.hpp>
@@ -9,6 +10,7 @@
 #include "base/noncopyable.hpp"
 #include "platform/platform_event.hpp"
 #include "vk/frame_graph.hpp"
+#include "vk/pipeline.hpp"
 #include "vk/render_path.hpp"
 
 namespace rl::vulkan {
@@ -71,6 +73,7 @@ class renderer final : public noncopyable {
   void recreate_swapchain();
   void release_swapchain() noexcept;
   void create_swapchain_image_views();
+  void create_debug_pipeline();
   void build_frame_graph(std::size_t image_index);
   void record_frame_commands(frame_resources& frame, std::size_t image_index);
   void draw_frame_impl();
@@ -88,6 +91,9 @@ class renderer final : public noncopyable {
   std::vector<vk::ImageLayout> image_layouts_;
   std::vector<vk::raii::Semaphore> render_finished_;
   std::vector<vk::Fence> image_in_flight_fences_;
+  std::optional<shader_module> debug_vertex_shader_;
+  std::optional<shader_module> debug_fragment_shader_;
+  std::optional<graphics_pipeline> debug_triangle_pipeline_;
 
   platform::extent2d drawable_extent_{};
   vk::SurfaceFormatKHR surface_format_{};

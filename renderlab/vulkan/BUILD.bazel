@@ -9,6 +9,7 @@ cc_library(
         "src/frame_graph.cpp",
         "src/memory_allocator.cpp",
         "src/physical_device.cpp",
+        "src/pipeline.cpp",
         "src/render_path.cpp",
         "src/renderer.cpp",
         "src/vulkan_context.cpp",
@@ -18,6 +19,7 @@ cc_library(
         "include/vk/frame_graph.hpp",
         "include/vk/memory_allocator.hpp",
         "include/vk/physical_device.hpp",
+        "include/vk/pipeline.hpp",
         "include/vk/render_path.hpp",
         "include/vk/renderer.hpp",
         "include/vk/vulkan_context.hpp",
@@ -25,6 +27,7 @@ cc_library(
     includes = ["include"],
     strip_include_prefix = "include",
     deps = [
+        "//renderlab/assets",
         "//renderlab/base",
         "//renderlab/platform",
         "@spdlog",

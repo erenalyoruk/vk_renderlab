@@ -1,10 +1,14 @@
 #include "vk/render_path.hpp"
 
+#include <array>
+#include <functional>
+#include <optional>
 #include <string_view>
 
 #include <vulkan/vulkan_raii.hpp>
 
 #include "vk/frame_graph.hpp"
+#include "vk/pipeline.hpp"
 
 namespace rl::vulkan {
 namespace {
@@ -56,6 +60,7 @@ void import_swapchain(frame_graph& graph) {
 
 void add_swapchain_clear_pass(frame_graph& graph, const render_path_build_info& info) {
   const render_path_swapchain_target target = info.swapchain;
+  const std::optional<std::reference_wrapper<const graphics_pipeline>> debug_pipeline = info.debug_pipeline;
 
   graph.add_pass(frame_graph_pass{
     .name = std::string{clear_pass_name(info.path)},
@@ -68,7 +73,9 @@ void add_swapchain_clear_pass(frame_graph& graph, const render_path_build_info& 
           },
         },
     .execute =
-        [target](const frame_graph_context& graph_context) {
+        [target, debug_pipeline](const frame_graph_context& graph_context) {
+          const vk::raii::CommandBuffer& command_buffer = graph_context.command_buffer.get();
+
           const vk::ImageMemoryBarrier2 to_color_attachment = make_color_layout_barrier(
               target.image, target.old_layout, vk::ImageLayout::eColorAttachmentOptimal,
               vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone,
@@ -76,7 +83,7 @@ void add_swapchain_clear_pass(frame_graph& graph, const render_path_build_info& 
 
           vk::DependencyInfo to_color_attachment_dependency{};
           to_color_attachment_dependency.setImageMemoryBarriers(to_color_attachment);
-          graph_context.command_buffer.get().pipelineBarrier2(to_color_attachment_dependency);
+          command_buffer.pipelineBarrier2(to_color_attachment_dependency);
 
           vk::RenderingAttachmentInfo color_attachment{};
           color_attachment.imageView = target.image_view;
@@ -91,8 +98,27 @@ void add_swapchain_clear_pass(frame_graph& graph, const render_path_build_info& 
           rendering_info.layerCount = 1;
           rendering_info.setColorAttachments(color_attachment);
 
-          graph_context.command_buffer.get().beginRendering(rendering_info);
-          graph_context.command_buffer.get().endRendering();
+          command_buffer.beginRendering(rendering_info);
+
+          if (debug_pipeline.has_value()) {
+            const graphics_pipeline& pipeline = debug_pipeline->get();
+            const vk::Viewport viewport{
+              0.0f, 0.0f, static_cast<float>(target.extent.width), static_cast<float>(target.extent.height), 0.0f, 1.0f,
+            };
+            const vk::Rect2D scissor{
+              vk::Offset2D{0, 0},
+              target.extent,
+            };
+            const std::array viewports = {viewport};
+            const std::array scissors = {scissor};
+
+            command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle());
+            command_buffer.setViewport(0, viewports);
+            command_buffer.setScissor(0, scissors);
+            command_buffer.draw(3, 1, 0, 0);
+          }
+
+          command_buffer.endRendering();
 
           const vk::ImageMemoryBarrier2 to_present = make_color_layout_barrier(
               target.image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
@@ -101,7 +127,7 @@ void add_swapchain_clear_pass(frame_graph& graph, const render_path_build_info& 
 
           vk::DependencyInfo to_present_dependency{};
           to_present_dependency.setImageMemoryBarriers(to_present);
-          graph_context.command_buffer.get().pipelineBarrier2(to_present_dependency);
+          command_buffer.pipelineBarrier2(to_present_dependency);
         },
   });
 }

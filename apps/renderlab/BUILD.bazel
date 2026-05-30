@@ -7,7 +7,6 @@ cc_binary(
     srcs = ["src/main.cpp"],
     data = ["//renderlab/shaders:runtime_shaders"],
     deps = [
-        "//renderlab/assets",
         "//renderlab/base",
         "//renderlab/platform",
         "//renderlab/ui",

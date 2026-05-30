@@ -4,17 +4,23 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <functional>
 #include <limits>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
 
+#include "assets/file_io.hpp"
 #include "base/log.hpp"
 #include "vk/device.hpp"
 #include "vk/frame_graph.hpp"
+#include "vk/pipeline.hpp"
 #include "vk/render_path.hpp"
 #include "vk/vulkan_context.hpp"
 
@@ -23,6 +29,8 @@ namespace {
 
 constexpr std::uint32_t min_frames_in_flight = 1;
 constexpr std::uint32_t max_frames_in_flight = 3;
+constexpr std::string_view triangle_vertex_shader_path = "renderlab/shaders/triangle.vert.spv";
+constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/triangle.frag.spv";
 
 [[nodiscard]] bool extent_has_area(platform::extent2d extent) noexcept { return extent.width > 0 && extent.height > 0; }
 
@@ -100,6 +108,14 @@ constexpr std::uint32_t max_frames_in_flight = 3;
   }
 
   return resize->size;
+}
+
+[[nodiscard]] std::vector<std::byte> load_shader_bytes(std::string_view workspace_relative_path) {
+  const std::filesystem::path path = assets::resolve_runfile(workspace_relative_path);
+  std::vector<std::byte> bytecode = assets::read_binary_file(path);
+
+  RL_SHADER_INFO("loaded shader module input: '{}' ({} bytes)", path.string(), bytecode.size());
+  return bytecode;
 }
 
 }  // namespace
@@ -296,6 +312,7 @@ void renderer::recreate_swapchain() {
   image_in_flight_fences_.assign(swapchain_images_.size(), nullptr);
 
   create_swapchain_image_views();
+  create_debug_pipeline();
 
   const vk::SemaphoreCreateInfo semaphore_create_info{};
   render_finished_.reserve(swapchain_images_.size());
@@ -308,6 +325,7 @@ void renderer::recreate_swapchain() {
 }
 
 void renderer::release_swapchain() noexcept {
+  debug_triangle_pipeline_.reset();
   render_finished_.clear();
   swapchain_image_views_.clear();
   image_in_flight_fences_.clear();
@@ -326,8 +344,30 @@ void renderer::create_swapchain_image_views() {
   }
 }
 
+void renderer::create_debug_pipeline() {
+  if (!debug_vertex_shader_.has_value()) {
+    debug_vertex_shader_.emplace(context_.device().handle(), load_shader_bytes(triangle_vertex_shader_path));
+  }
+
+  if (!debug_fragment_shader_.has_value()) {
+    debug_fragment_shader_.emplace(context_.device().handle(), load_shader_bytes(triangle_fragment_shader_path));
+  }
+
+  debug_triangle_pipeline_.emplace(context_.device().handle(), graphics_pipeline_description{
+                                                                 .vertex_shader = std::cref(*debug_vertex_shader_),
+                                                                 .fragment_shader = std::cref(*debug_fragment_shader_),
+                                                                 .color_format = surface_format_.format,
+                                                               });
+
+  RL_SHADER_INFO("debug triangle pipeline ready: color_format={}", vk::to_string(surface_format_.format));
+}
+
 void renderer::build_frame_graph(std::size_t image_index) {
   const optional_device_features& optional_features = context_.device().optional_features();
+  const std::optional<std::reference_wrapper<const graphics_pipeline>> debug_pipeline =
+      debug_triangle_pipeline_.has_value()
+          ? std::optional<std::reference_wrapper<const graphics_pipeline>>{std::cref(*debug_triangle_pipeline_)}
+          : std::nullopt;
 
   build_render_path_frame_graph(frame_graph_, render_path_build_info{
                                                 .path = settings_.path,
@@ -345,6 +385,7 @@ void renderer::build_frame_graph(std::size_t image_index) {
                                                       .extent = swapchain_extent_,
                                                       .clear_color = settings_.clear_color,
                                                     },
+                                                .debug_pipeline = debug_pipeline,
                                               });
 }
 

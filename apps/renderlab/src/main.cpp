@@ -7,7 +7,6 @@
 #include <variant>
 #include <vector>
 
-#include "assets/file_io.hpp"
 #include "base/log.hpp"
 #include "base/log_level.hpp"
 #include "platform/event_dispatcher.hpp"
@@ -141,16 +140,6 @@ int main() {
     const rl::vulkan::vulkan_context vulkan_context{window};
     rl::vulkan::renderer renderer{vulkan_context, window.state().drawable_size};
     const rl::ui::imgui_layer imgui_layer;
-
-    const auto vertex_shader_path = rl::assets::resolve_runfile("renderlab/shaders/triangle.vert.spv");
-    const auto fragment_shader_path = rl::assets::resolve_runfile("renderlab/shaders/triangle.frag.spv");
-    const auto vertex_shader = rl::assets::read_binary_file(vertex_shader_path);
-    const auto fragment_shader = rl::assets::read_binary_file(fragment_shader_path);
-
-    RL_SHADER_INFO("loaded Slang/SPIR-V vertex shader: '{}' ({} bytes)", vertex_shader_path.string(),
-                   vertex_shader.size());
-    RL_SHADER_INFO("loaded Slang/SPIR-V fragment shader: '{}' ({} bytes)", fragment_shader_path.string(),
-                   fragment_shader.size());
 
     RL_APP_INFO("bootstrap complete");
 

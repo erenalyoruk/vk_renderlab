@@ -1,11 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <string_view>
 
 #include <vulkan/vulkan_raii.hpp>
 
 #include "vk/frame_graph.hpp"
+#include "vk/pipeline.hpp"
 
 namespace rl::vulkan {
 
@@ -33,6 +36,7 @@ struct render_path_build_info {
   render_path path = render_path::forward_plus;
   render_path_capabilities capabilities{};
   render_path_swapchain_target swapchain{};
+  std::optional<std::reference_wrapper<const graphics_pipeline>> debug_pipeline = std::nullopt;
 };
 
 void build_render_path_frame_graph(frame_graph& graph, const render_path_build_info& info);
