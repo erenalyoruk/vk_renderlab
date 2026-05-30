@@ -1,6 +1,5 @@
 #include "platform/event_dispatcher.hpp"
 
-#include <algorithm>
 #include <optional>
 #include <span>
 #include <utility>
