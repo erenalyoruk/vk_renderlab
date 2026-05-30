@@ -2,11 +2,13 @@
 #include <cstdlib>
 #include <exception>
 #include <thread>
+#include <vector>
 
 #include <spdlog/spdlog.h>
 
 #include "assets/file_io.hpp"
 #include "base/log.hpp"
+#include "platform/platform_event.hpp"
 #include "platform/sdl_window.hpp"
 #include "ui/imgui_layer.hpp"
 #include "vk/vulkan_context.hpp"
@@ -66,7 +68,15 @@ int main() {
 
     RL_APP_INFO("bootstrap complete");
 
-    while (!window.poll_events()) {
+    rl::platform::input_state input_state;
+
+    while (!window.state().close_requested) {
+      const std::vector<rl::platform::platform_event> events = window.poll_events();
+
+      for (const rl::platform::platform_event& event : events) {
+        input_state.apply(event);
+      }
+
       // Placeholder loop. The next milestone will acquire a swapchain image, record a
       // command buffer and present a clear color.
       std::this_thread::sleep_for(std::chrono::milliseconds(8));
