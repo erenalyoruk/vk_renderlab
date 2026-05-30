@@ -38,7 +38,7 @@ slang_shader(
 
 shader_group(
     name = "runtime_shaders",
-    pkg_prefix = "shaders/",
+    pkg_prefix = "renderlab/shaders/",
     deps = [
         ":triangle_frag",
         ":triangle_vert",
