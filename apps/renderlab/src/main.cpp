@@ -15,6 +15,7 @@
 #include "platform/platform_event.hpp"
 #include "platform/sdl_window.hpp"
 #include "ui/imgui_layer.hpp"
+#include "vk/clear_renderer.hpp"
 #include "vk/vulkan_context.hpp"
 
 namespace {
@@ -154,6 +155,7 @@ int main() {
     });
 
     const rl::vulkan::vulkan_context vulkan_context{window};
+    rl::vulkan::clear_renderer renderer{vulkan_context, window.state().drawable_size};
     const rl::ui::imgui_layer imgui_layer;
 
     const auto vertex_shader_path = rl::assets::resolve_runfile("renderlab/shaders/triangle.vert.spv");
@@ -182,10 +184,13 @@ int main() {
     while (running && !window.state().close_requested) {
       const std::vector<rl::platform::platform_event> events = window.poll_events();
       process_platform_events(events, input_state, event_dispatcher, input_actions, running);
+      renderer.resize(window.state().drawable_size);
 
-      // Placeholder loop. The next milestone will acquire a swapchain image, record a
-      // command buffer and present a clear color.
-      sleep_until_next_frame(renderer_suspended);
+      if (renderer_suspended) {
+        sleep_until_next_frame(renderer_suspended);
+      } else {
+        renderer.draw_frame();
+      }
     }
 
     RL_APP_INFO("main loop exited");

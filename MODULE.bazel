@@ -10,11 +10,9 @@ bazel_dep(name = "rules_shell", version = "0.8.0")
 bazel_dep(name = "rules_vulkan", version = "0.8.0")
 bazel_dep(name = "spdlog", version = "1.17.0")
 
-# Developer-only tooling
 bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.2", dev_dependency = True)
 bazel_dep(name = "wolfd_bazel_compile_commands", version = "0.5.2", dev_dependency = True)
 
-# Vulkan SDK managed by rules_vulkan
 vulkan_sdk = use_extension("@rules_vulkan//vulkan:extensions.bzl", "vulkan_sdk")
 vulkan_sdk.toolchain(
     name = "vk_sdk",
@@ -24,11 +22,8 @@ use_repo(vulkan_sdk, "vk_sdk")
 
 register_toolchains("@vk_sdk//:all")
 
-# Plain http_archive from MODULE.bazel throught use_repo_rule
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# SDL3 is built from source through rules_foreign_cc + CMake because SDL3 is not
-# currently exposed as a ready-to-use Bazel Central Registry module like spdlog.
 http_archive(
     name = "sdl3",
     build_file = "//third_party:sdl3.BUILD.bazel",
@@ -37,12 +32,18 @@ http_archive(
     urls = ["https://github.com/libsdl-org/SDL/releases/download/release-3.4.8/SDL3-3.4.8.tar.gz"],
 )
 
-# ImGui docking branch. We vendor an overlay BUILD file so SDL3/Vulkan backends can be
-# selected explicitly instead of relying on older SDL2-oriented Bazel overlays.
 http_archive(
     name = "imgui",
     build_file = "//third_party:imgui.BUILD.bazel",
     sha256 = "ca0653454ed371b7a87e9b0bc29a5d15c9be7f7c0fbe778042fc48c71df1d3d8",
     strip_prefix = "imgui-1.92.8-docking",
     urls = ["https://github.com/ocornut/imgui/archive/refs/tags/v1.92.8-docking.tar.gz"],
+)
+
+http_archive(
+    name = "vulkan_memory_allocator",
+    build_file = "//third_party:vma.BUILD.bazel",
+    sha256 = "c4f6bbe6b5a45c2eb610ca9d231158e313086d5b1a40c9922cb42b597419b14e",
+    strip_prefix = "VulkanMemoryAllocator-3.3.0",
+    urls = ["https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/archive/refs/tags/v3.3.0.tar.gz"],
 )

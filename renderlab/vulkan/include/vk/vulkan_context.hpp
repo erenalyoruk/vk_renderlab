@@ -10,6 +10,7 @@
 #include "base/noncopyable.hpp"
 #include "platform/sdl_window.hpp"
 #include "vk/device.hpp"
+#include "vk/memory_allocator.hpp"
 #include "vk/physical_device.hpp"
 
 namespace rl::vulkan {
@@ -42,6 +43,7 @@ class vulkan_context final : public noncopyable {
   [[nodiscard]] const vk::raii::Instance& instance() const noexcept;
   [[nodiscard]] const vk::raii::SurfaceKHR& surface() const noexcept;
   [[nodiscard]] const rl::vulkan::device& device() const noexcept;
+  [[nodiscard]] const memory_allocator& allocator() const noexcept;
 
   [[nodiscard]] vk::Instance raw_instance() const noexcept;
   [[nodiscard]] vk::SurfaceKHR raw_surface() const noexcept;
@@ -75,12 +77,14 @@ class vulkan_context final : public noncopyable {
   std::size_t selected_physical_device_index_ = 0;
 
   std::optional<rl::vulkan::device> device_;
+  std::optional<memory_allocator> allocator_;
 
   void create_instance(const platform::sdl_window& window);
   void create_debug_messenger();
   void create_surface(const platform::sdl_window& window);
   void enumerate_and_select_physical_device();
   void create_logical_device();
+  void create_memory_allocator();
 
   [[nodiscard]] bool validation_layers_available() const;
   [[nodiscard]] bool instance_extension_available(std::string_view extension_name) const;

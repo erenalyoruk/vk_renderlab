@@ -5,12 +5,16 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "vulkan",
     srcs = [
+        "src/clear_renderer.cpp",
         "src/device.cpp",
+        "src/memory_allocator.cpp",
         "src/physical_device.cpp",
         "src/vulkan_context.cpp",
     ],
     hdrs = [
+        "include/vk/clear_renderer.hpp",
         "include/vk/device.hpp",
+        "include/vk/memory_allocator.hpp",
         "include/vk/physical_device.hpp",
         "include/vk/vulkan_context.hpp",
     ],
@@ -21,5 +25,6 @@ cc_library(
         "//renderlab/platform",
         "@spdlog",
         "@vk_sdk//:vulkan",
+        "@vulkan_memory_allocator//:vma",
     ],
 )

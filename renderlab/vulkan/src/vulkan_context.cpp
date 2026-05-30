@@ -17,6 +17,7 @@
 #include "base/log.hpp"
 #include "platform/sdl_window.hpp"
 #include "vk/device.hpp"
+#include "vk/memory_allocator.hpp"
 #include "vk/physical_device.hpp"
 
 namespace rl::vulkan {
@@ -149,6 +150,7 @@ vulkan_context::vulkan_context(const platform::sdl_window& window, vulkan_contex
   create_surface(window);
   enumerate_and_select_physical_device();
   create_logical_device();
+  create_memory_allocator();
 
   RL_VK_INFO("Vulkan context initialized");
 }
@@ -167,6 +169,14 @@ const device& vulkan_context::device() const noexcept {
   }
 
   return *device_;
+}
+
+const memory_allocator& vulkan_context::allocator() const noexcept {
+  if (!allocator_.has_value()) {
+    std::terminate();
+  }
+
+  return *allocator_;
 }
 
 vk::Instance vulkan_context::raw_instance() const noexcept { return *instance_; }
@@ -419,6 +429,16 @@ void vulkan_context::enumerate_and_select_physical_device() {
 
 void vulkan_context::create_logical_device() {
   device_.emplace(selected_physical_device_handle(), selected_physical_device(), config_.requirements);
+}
+
+void vulkan_context::create_memory_allocator() {
+  allocator_.emplace(memory_allocator_config{
+    .instance = c_instance(),
+    .physical_device = c_physical_device(),
+    .device = c_device(),
+    .vulkan_api_version = config_.requirements.require_vulkan_1_3 ? VK_API_VERSION_1_3 : VK_API_VERSION_1_0,
+    .buffer_device_address = selected_physical_device().features.vulkan12.bufferDeviceAddress == vk::True,
+  });
 }
 
 }  // namespace rl::vulkan

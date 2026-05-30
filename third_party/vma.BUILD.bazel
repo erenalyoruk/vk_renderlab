@@ -1,0 +1,12 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])
+
+cc_library(
+    name = "vma",
+    hdrs = ["include/vk_mem_alloc.h"],
+    includes = ["include"],
+    deps = ["@vk_sdk//:vulkan"],
+)

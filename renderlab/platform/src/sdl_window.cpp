@@ -1,5 +1,9 @@
 #include "platform/sdl_window.hpp"
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -18,8 +22,94 @@ namespace rl::platform {
 
 namespace {
 
+constexpr std::string_view k_app_name = "Vulkan RenderLab";
+constexpr std::string_view k_app_version = "0.1.0";
+constexpr std::string_view k_app_identifier = "dev.eren.vulkan-renderlab";
+constexpr std::int32_t k_icon_size = 64;
+
 [[nodiscard]] std::runtime_error make_sdl_error(std::string_view what) {
   return std::runtime_error{std::string{what} + ": " + SDL_GetError()};
+}
+
+struct sdl_surface_deleter {
+  void operator()(SDL_Surface* surface) const noexcept {
+    if (surface != nullptr) {
+      SDL_DestroySurface(surface);
+    }
+  }
+};
+
+using sdl_surface_ptr = std::unique_ptr<SDL_Surface, sdl_surface_deleter>;
+
+void set_sdl_metadata() {
+  const std::string app_name{k_app_name};
+  const std::string app_version{k_app_version};
+  const std::string app_identifier{k_app_identifier};
+
+  if (!SDL_SetAppMetadata(app_name.c_str(), app_version.c_str(), app_identifier.c_str())) {
+    throw make_sdl_error("SDL_SetAppMetadata failed");
+  }
+
+  if (!SDL_SetHint(SDL_HINT_APP_ID, app_identifier.c_str())) {
+    throw make_sdl_error("SDL_SetHint(SDL_HINT_APP_ID) failed");
+  }
+
+  if (!SDL_SetHint(SDL_HINT_APP_NAME, app_name.c_str())) {
+    throw make_sdl_error("SDL_SetHint(SDL_HINT_APP_NAME) failed");
+  }
+}
+
+[[nodiscard]] sdl_surface_ptr make_window_icon() {
+  sdl_surface_ptr icon{SDL_CreateSurface(k_icon_size, k_icon_size, SDL_PIXELFORMAT_RGBA32)};
+
+  if (!icon) {
+    throw make_sdl_error("SDL_CreateSurface failed");
+  }
+
+  struct icon_color {
+    std::uint8_t red = 0;
+    std::uint8_t green = 0;
+    std::uint8_t blue = 0;
+    std::uint8_t alpha = 255;
+  };
+
+  constexpr std::array<icon_color, 4> palette = {
+    icon_color{.red = 0xd0, .green = 0x8a, .blue = 0x38},
+    icon_color{.red = 0x38, .green = 0xa3, .blue = 0xd0},
+    icon_color{.red = 0x20, .green = 0x24, .blue = 0x2c},
+    icon_color{.red = 0xff, .green = 0xff, .blue = 0xff},
+  };
+
+  for (std::int32_t row = 0; row < k_icon_size; ++row) {
+    for (std::int32_t column = 0; column < k_icon_size; ++column) {
+      const bool in_border = column < 4 || row < 4 || column >= k_icon_size - 4 || row >= k_icon_size - 4;
+      const bool in_slash = column > row - 7 && column < row + 7;
+      const bool in_backslash = column > (k_icon_size - row) - 11 && column < (k_icon_size - row) + 3;
+
+      icon_color color = palette.at(2);
+      if (in_border) {
+        color = palette.at(0);
+      } else if (in_slash) {
+        color = palette.at(1);
+      } else if (in_backslash) {
+        color = palette.at(3);
+      }
+
+      if (!SDL_WriteSurfacePixel(icon.get(), column, row, color.red, color.green, color.blue, color.alpha)) {
+        throw make_sdl_error("SDL_WriteSurfacePixel failed");
+      }
+    }
+  }
+
+  return icon;
+}
+
+void set_window_icon(SDL_Window* window) {
+  const sdl_surface_ptr icon = make_window_icon();
+
+  if (!SDL_SetWindowIcon(window, icon.get())) {
+    throw make_sdl_error("SDL_SetWindowIcon failed");
+  }
 }
 
 [[nodiscard]] key map_key(SDL_Scancode scancode) noexcept {
@@ -324,6 +414,8 @@ std::optional<platform_event> translate_mouse_wheel_event(const SDL_MouseWheelEv
 }  // namespace
 
 sdl_video_session::sdl_video_session() {
+  set_sdl_metadata();
+
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     throw make_sdl_error("SDL_Init(SDL_INIT_VIDEO) failed");
   }
@@ -361,6 +453,7 @@ sdl_window::sdl_window(const window_config& config) {
   }
 
   window_id_ = SDL_GetWindowID(window_.get());
+  set_window_icon(window_.get());
   refresh_window_state();
 
   RL_PLATFORM_INFO("SDL3 window created");
