@@ -6,6 +6,7 @@ cc_library(
     name = "vulkan",
     srcs = [
         "src/device.cpp",
+        "src/frame_graph.cpp",
         "src/memory_allocator.cpp",
         "src/physical_device.cpp",
         "src/renderer.cpp",
@@ -13,6 +14,7 @@ cc_library(
     ],
     hdrs = [
         "include/vk/device.hpp",
+        "include/vk/frame_graph.hpp",
         "include/vk/memory_allocator.hpp",
         "include/vk/physical_device.hpp",
         "include/vk/renderer.hpp",

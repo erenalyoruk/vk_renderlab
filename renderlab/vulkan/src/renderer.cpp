@@ -14,6 +14,7 @@
 
 #include "base/log.hpp"
 #include "vk/device.hpp"
+#include "vk/frame_graph.hpp"
 #include "vk/vulkan_context.hpp"
 
 namespace rl::vulkan {
@@ -206,6 +207,8 @@ renderer_status renderer::status() const noexcept {
     .swapchain_extent = swapchain_extent_,
     .swapchain_image_count = static_cast<std::uint32_t>(swapchain_images_.size()),
     .frame_index = frame_index_,
+    .frame_graph_pass_count = static_cast<std::uint32_t>(frame_graph_.passes().size()),
+    .path = settings_.path,
     .suspended = suspended_,
     .swapchain_ready = static_cast<bool>(*swapchain_) && has_drawable_extent(),
   };
@@ -343,51 +346,80 @@ void renderer::create_swapchain_image_views() {
   }
 }
 
+void renderer::build_frame_graph(std::size_t image_index) {
+  const vk::Image image = swapchain_images_.at(image_index);
+  const vk::ImageView image_view = *swapchain_image_views_.at(image_index);
+  const vk::ImageLayout old_layout = image_layouts_.at(image_index);
+
+  frame_graph_.clear();
+  frame_graph_.import_resource(frame_graph_resource{
+    .name = "swapchain.color",
+    .type = frame_graph_resource_type::swapchain_image,
+  });
+
+  frame_graph_.add_pass(frame_graph_pass{
+    .name = "clear.swapchain",
+    .queue = frame_graph_queue::graphics,
+    .accesses =
+        {
+          frame_graph_access{
+            .resource = "swapchain.color",
+            .access = frame_graph_access_type::write,
+          },
+        },
+    .execute =
+        [this, image, image_view, old_layout](const frame_graph_context& graph_context) {
+          const vk::ImageMemoryBarrier2 to_color_attachment = make_color_layout_barrier(
+              image, old_layout, vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eNone,
+              vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+              vk::AccessFlagBits2::eColorAttachmentWrite);
+
+          vk::DependencyInfo to_color_attachment_dependency{};
+          to_color_attachment_dependency.setImageMemoryBarriers(to_color_attachment);
+          graph_context.command_buffer.get().pipelineBarrier2(to_color_attachment_dependency);
+
+          vk::RenderingAttachmentInfo color_attachment{};
+          color_attachment.imageView = image_view;
+          color_attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+          color_attachment.loadOp = vk::AttachmentLoadOp::eClear;
+          color_attachment.storeOp = vk::AttachmentStoreOp::eStore;
+          color_attachment.clearValue = vk::ClearValue{settings_.clear_color};
+
+          vk::RenderingInfo rendering_info{};
+          rendering_info.renderArea.offset = vk::Offset2D{0, 0};
+          rendering_info.renderArea.extent = swapchain_extent_;
+          rendering_info.layerCount = 1;
+          rendering_info.setColorAttachments(color_attachment);
+
+          graph_context.command_buffer.get().beginRendering(rendering_info);
+          graph_context.command_buffer.get().endRendering();
+
+          const vk::ImageMemoryBarrier2 to_present = make_color_layout_barrier(
+              image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
+              vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eColorAttachmentWrite,
+              vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone);
+
+          vk::DependencyInfo to_present_dependency{};
+          to_present_dependency.setImageMemoryBarriers(to_present);
+          graph_context.command_buffer.get().pipelineBarrier2(to_present_dependency);
+        },
+  });
+
+  frame_graph_.compile();
+}
+
 void renderer::record_frame_commands(frame_resources& frame, std::size_t image_index) {
   const vk::raii::CommandBuffer& command_buffer = frame.command_buffer;
   command_buffer.reset();
 
+  build_frame_graph(image_index);
+
   vk::CommandBufferBeginInfo begin_info{};
   begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
   command_buffer.begin(begin_info);
-
-  const vk::Image image = swapchain_images_.at(image_index);
-
-  const vk::ImageMemoryBarrier2 to_color_attachment = make_color_layout_barrier(
-      image, image_layouts_.at(image_index), vk::ImageLayout::eColorAttachmentOptimal,
-      vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-      vk::AccessFlagBits2::eColorAttachmentWrite);
-
-  vk::DependencyInfo to_color_attachment_dependency{};
-  to_color_attachment_dependency.setImageMemoryBarriers(to_color_attachment);
-  command_buffer.pipelineBarrier2(to_color_attachment_dependency);
-
-  vk::RenderingAttachmentInfo color_attachment{};
-  color_attachment.imageView = *swapchain_image_views_.at(image_index);
-  color_attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-  color_attachment.loadOp = vk::AttachmentLoadOp::eClear;
-  color_attachment.storeOp = vk::AttachmentStoreOp::eStore;
-  color_attachment.clearValue = vk::ClearValue{settings_.clear_color};
-
-  vk::RenderingInfo rendering_info{};
-  rendering_info.renderArea.offset = vk::Offset2D{0, 0};
-  rendering_info.renderArea.extent = swapchain_extent_;
-  rendering_info.layerCount = 1;
-  rendering_info.setColorAttachments(color_attachment);
-
-  command_buffer.beginRendering(rendering_info);
-  command_buffer.endRendering();
-
-  const vk::ImageMemoryBarrier2 to_present = make_color_layout_barrier(
-      image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
-      vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eColorAttachmentWrite,
-      vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone);
-
-  vk::DependencyInfo to_present_dependency{};
-  to_present_dependency.setImageMemoryBarriers(to_present);
-  command_buffer.pipelineBarrier2(to_present_dependency);
-
+  frame_graph_.execute(command_buffer);
   command_buffer.end();
+
   image_layouts_.at(image_index) = vk::ImageLayout::ePresentSrcKHR;
 }
 
@@ -459,6 +491,19 @@ void renderer::wait_device_idle() noexcept {
   } catch (const vk::Error& error) {
     RL_RENDER_ERROR("failed to wait for device idle: {}", error.what());
   }
+}
+
+std::string_view to_string(render_path path) noexcept {
+  switch (path) {
+    case render_path::forward:
+      return "forward";
+    case render_path::forward_plus:
+      return "forward_plus";
+    case render_path::deferred:
+      return "deferred";
+  }
+
+  return "unknown";
 }
 
 }  // namespace rl::vulkan

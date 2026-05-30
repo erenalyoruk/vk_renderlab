@@ -2,20 +2,29 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 #include <vulkan/vulkan_raii.hpp>
 
 #include "base/noncopyable.hpp"
 #include "platform/platform_event.hpp"
+#include "vk/frame_graph.hpp"
 
 namespace rl::vulkan {
 
 class vulkan_context;
 
+enum class render_path : std::uint8_t {
+  forward,
+  forward_plus,
+  deferred,
+};
+
 struct renderer_settings {
   vk::ClearColorValue clear_color{std::array{0.06f, 0.09f, 0.14f, 1.0f}};
   vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
+  render_path path = render_path::forward_plus;
   std::uint32_t max_frames_in_flight = 2;
   bool recreate_swapchain_on_suboptimal = true;
 };
@@ -25,6 +34,8 @@ struct renderer_status {
   vk::Extent2D swapchain_extent{};
   std::uint32_t swapchain_image_count = 0;
   std::uint64_t frame_index = 0;
+  std::uint32_t frame_graph_pass_count = 0;
+  render_path path = render_path::forward_plus;
   bool suspended = false;
   bool swapchain_ready = false;
 };
@@ -66,6 +77,7 @@ class renderer final : public noncopyable {
   void recreate_swapchain();
   void release_swapchain() noexcept;
   void create_swapchain_image_views();
+  void build_frame_graph(std::size_t image_index);
   void record_frame_commands(frame_resources& frame, std::size_t image_index);
   void draw_frame_impl();
   void wait_device_idle() noexcept;
@@ -87,10 +99,13 @@ class renderer final : public noncopyable {
   vk::SurfaceFormatKHR surface_format_{};
   vk::PresentModeKHR present_mode_ = vk::PresentModeKHR::eFifo;
   vk::Extent2D swapchain_extent_{};
+  frame_graph frame_graph_;
 
   std::size_t current_frame_ = 0;
   std::uint64_t frame_index_ = 0;
   bool suspended_ = false;
 };
+
+[[nodiscard]] std::string_view to_string(render_path path) noexcept;
 
 }  // namespace rl::vulkan
