@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -21,7 +22,7 @@ namespace rl::vulkan {
 class vulkan_context;
 
 struct renderer_settings {
-  vk::ClearColorValue clear_color{std::array{0.06f, 0.09f, 0.14f, 1.0f}};
+  std::array<float, 4> clear_color{0.06f, 0.09f, 0.14f, 1.0f};
   vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
   render_path path = render_path::forward_plus;
   std::uint32_t max_frames_in_flight = 2;

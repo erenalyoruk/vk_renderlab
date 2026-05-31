@@ -175,7 +175,7 @@ int main() {
       });
 
       imgui_layer.begin_frame();
-      imgui_layer.draw_renderer_status(renderer.status());
+      imgui_layer.draw_renderer_panel(renderer.status(), renderer.settings());
       imgui_layer.end_frame();
 
       if (renderer.suspended()) {

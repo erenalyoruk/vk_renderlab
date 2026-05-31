@@ -13,6 +13,7 @@ class sdl_window;
 
 namespace rl::vulkan {
 class vulkan_context;
+struct renderer_settings;
 struct renderer_status;
 }  // namespace rl::vulkan
 
@@ -40,7 +41,7 @@ class imgui_layer final : public noncopyable {
   void handle_event(const SDL_Event& event) noexcept;
   void update_render_target(imgui_render_target render_target);
   void begin_frame();
-  void draw_renderer_status(const rl::vulkan::renderer_status& status);
+  void draw_renderer_panel(const rl::vulkan::renderer_status& status, rl::vulkan::renderer_settings& settings);
   void end_frame();
   void render(VkCommandBuffer command_buffer);
 

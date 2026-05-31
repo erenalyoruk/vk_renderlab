@@ -1,5 +1,6 @@
 #include "ui/imgui_layer.hpp"
 
+#include <array>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -34,6 +35,43 @@ void check_vk_result(VkResult result) {
 }
 
 void text_unformatted(const std::string& text) { ImGui::TextUnformatted(text.c_str()); }
+
+void draw_render_path_control(rl::vulkan::renderer_settings& settings) {
+  constexpr std::array render_paths{
+    rl::vulkan::render_path::forward,
+    rl::vulkan::render_path::forward_plus,
+    rl::vulkan::render_path::deferred,
+  };
+
+  const std::string current_path{rl::vulkan::to_string(settings.path)};
+  if (!ImGui::BeginCombo("Path", current_path.c_str())) {
+    return;
+  }
+
+  for (const rl::vulkan::render_path path : render_paths) {
+    const std::string path_name{rl::vulkan::to_string(path)};
+    const bool selected = settings.path == path;
+    if (ImGui::Selectable(path_name.c_str(), selected)) {
+      settings.path = path;
+    }
+    if (selected) {
+      ImGui::SetItemDefaultFocus();
+    }
+  }
+
+  ImGui::EndCombo();
+}
+
+void draw_renderer_settings(rl::vulkan::renderer_settings& settings) {
+  draw_render_path_control(settings);
+
+  std::array clear_color = settings.clear_color;
+  if (ImGui::ColorEdit4("Clear", clear_color.data())) {
+    settings.clear_color = clear_color;
+  }
+
+  ImGui::Checkbox("Recreate on suboptimal swapchain", &settings.recreate_swapchain_on_suboptimal);
+}
 
 }  // namespace
 
@@ -120,14 +158,19 @@ void imgui_layer::begin_frame() {
   ImGui::NewFrame();
 }
 
-void imgui_layer::draw_renderer_status(const rl::vulkan::renderer_status& status) {
+void imgui_layer::draw_renderer_panel(const rl::vulkan::renderer_status& status,
+                                      rl::vulkan::renderer_settings& settings) {
   ImGui::SetCurrentContext(imgui_context(context_));
 
   ImGui::SetNextWindowPos(ImVec2{12.0f, 12.0f}, ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2{300.0f, 0.0f}, ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2{340.0f, 0.0f}, ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("RenderLab")) {
+    draw_renderer_settings(settings);
+
+    ImGui::SeparatorText("Status");
     text_unformatted(fmt::format("Frame: {}", status.frame_index));
+    text_unformatted(fmt::format("Render path: {}", rl::vulkan::to_string(status.path)));
     text_unformatted(fmt::format("Swapchain: {}x{}, images={}", status.swapchain_extent.width,
                                  status.swapchain_extent.height, status.swapchain_image_count));
     text_unformatted(fmt::format("Swapchain generation: {}", status.swapchain_generation));

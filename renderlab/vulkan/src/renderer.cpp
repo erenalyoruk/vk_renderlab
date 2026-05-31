@@ -524,7 +524,7 @@ void renderer::build_frame_graph(std::size_t image_index) {
                                                       .image_view = *swapchain_image_views_.at(image_index),
                                                       .old_layout = image_layouts_.at(image_index),
                                                       .extent = swapchain_extent_,
-                                                      .clear_color = settings_.clear_color,
+                                                      .clear_color = vk::ClearColorValue{settings_.clear_color},
                                                     },
                                                 .depth = depth_target,
                                                 .debug_pipeline = debug_pipeline,
