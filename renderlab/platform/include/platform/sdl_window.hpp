@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -38,10 +39,12 @@ struct window_config {
 
 class sdl_window final : public noncopyable {
  public:
+  using native_event_callback = std::function<void(const SDL_Event&)>;
+
   explicit sdl_window(const window_config& config);
   ~sdl_window() noexcept = default;
 
-  [[nodiscard]] std::vector<platform_event> poll_events();
+  [[nodiscard]] std::vector<platform_event> poll_events(const native_event_callback& native_event = {});
   void show();
   void hide();
 

@@ -139,7 +139,7 @@ int main() {
 
     const rl::vulkan::vulkan_context vulkan_context{window};
     rl::vulkan::renderer renderer{vulkan_context, window.state().drawable_size};
-    const rl::ui::imgui_layer imgui_layer;
+    rl::ui::imgui_layer imgui_layer{window};
 
     RL_APP_INFO("bootstrap complete");
 
@@ -155,8 +155,12 @@ int main() {
     RL_APP_INFO("entering main loop");
 
     while (running && !window.state().close_requested) {
-      const std::vector<rl::platform::platform_event> events = window.poll_events();
+      const std::vector<rl::platform::platform_event> events =
+          window.poll_events([&imgui_layer](const SDL_Event& event) { imgui_layer.handle_event(event); });
       process_platform_events(events, input_state, event_dispatcher, input_actions, running);
+
+      imgui_layer.begin_frame();
+      imgui_layer.end_frame();
 
       if (renderer.suspended()) {
         sleep_until_next_frame(renderer.suspended());

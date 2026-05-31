@@ -459,11 +459,15 @@ sdl_window::sdl_window(const window_config& config) {
   RL_PLATFORM_INFO("SDL3 window created");
 }
 
-std::vector<platform_event> sdl_window::poll_events() {
+std::vector<platform_event> sdl_window::poll_events(const native_event_callback& native_event) {
   std::vector<platform_event> events;
 
   SDL_Event event{};
   while (SDL_PollEvent(&event)) {
+    if (native_event) {
+      native_event(event);
+    }
+
     std::optional<platform_event> platform_event = translate_sdl_event(event, window_id_);
 
     if (platform_event.has_value()) {

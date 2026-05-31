@@ -10,6 +10,7 @@ cc_library(
     strip_include_prefix = "include",
     deps = [
         "//renderlab/base",
-        "@imgui//:imgui_core",
+        "//renderlab/platform",
+        "@imgui//:imgui_sdl3_backend",
     ],
 )
