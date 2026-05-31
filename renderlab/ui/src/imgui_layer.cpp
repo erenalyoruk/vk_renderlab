@@ -1,9 +1,19 @@
 #include "ui/imgui_layer.hpp"
 
-#include <backends/imgui_impl_sdl3.h>
-#include <imgui.h>
+#include <optional>
+#include <stdexcept>
+#include <string>
 
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <imgui.h>
+#include <spdlog/fmt/fmt.h>
+#include <vulkan/vulkan.h>
+
+#include "base/log.hpp"
 #include "platform/sdl_window.hpp"
+#include "vk/renderer.hpp"
+#include "vk/vulkan_context.hpp"
 
 namespace rl::ui {
 namespace {
@@ -15,17 +25,21 @@ namespace {
 
 [[nodiscard]] ImGuiContext* imgui_context(void* context) noexcept { return static_cast<ImGuiContext*>(context); }
 
-void build_font_atlas() {
-  ImGuiIO& imgui_io = ImGui::GetIO();
-  unsigned char* pixels = nullptr;
-  int width = 0;
-  int height = 0;
-  imgui_io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+void check_vk_result(VkResult result) {
+  if (result == VK_SUCCESS) {
+    return;
+  }
+
+  RL_UI_ERROR("ImGui Vulkan backend error: VkResult={}", static_cast<int>(result));
 }
+
+void text_unformatted(const std::string& text) { ImGui::TextUnformatted(text.c_str()); }
 
 }  // namespace
 
-imgui_layer::imgui_layer(rl::platform::sdl_window& window) : context_{create_imgui_context()} {
+imgui_layer::imgui_layer(rl::platform::sdl_window& window, const rl::vulkan::vulkan_context& context,
+                         imgui_render_target render_target)
+    : context_{create_imgui_context()}, device_{context.c_device()} {
   ImGui::SetCurrentContext(imgui_context(context_));
 
   ImGuiIO& imgui_io = ImGui::GetIO();
@@ -33,11 +47,46 @@ imgui_layer::imgui_layer(rl::platform::sdl_window& window) : context_{create_img
   imgui_io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
   ImGui_ImplSDL3_InitForVulkan(window.native_handle());
-  build_font_atlas();
+
+  VkPipelineRenderingCreateInfo pipeline_rendering_info{};
+  pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+  pipeline_rendering_info.colorAttachmentCount = 1;
+  pipeline_rendering_info.pColorAttachmentFormats = &render_target.color_format;
+
+  const std::optional<std::uint32_t> graphics_queue_family = context.device().queues().graphics;
+  if (!graphics_queue_family.has_value()) {
+    throw std::runtime_error{"ImGui Vulkan backend requires a graphics queue"};
+  }
+
+  ImGui_ImplVulkan_InitInfo init_info{};
+  init_info.ApiVersion = VK_API_VERSION_1_3;
+  init_info.Instance = context.c_instance();
+  init_info.PhysicalDevice = context.c_physical_device();
+  init_info.Device = device_;
+  init_info.QueueFamily = *graphics_queue_family;
+  init_info.Queue = context.device().c_graphics_queue();
+  init_info.DescriptorPoolSize = 32;
+  init_info.MinImageCount = render_target.min_image_count;
+  init_info.ImageCount = render_target.image_count;
+  init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+  init_info.PipelineInfoMain.PipelineRenderingCreateInfo = pipeline_rendering_info;
+  init_info.UseDynamicRendering = true;
+  init_info.CheckVkResultFn = check_vk_result;
+
+  if (!ImGui_ImplVulkan_Init(&init_info)) {
+    throw std::runtime_error{"failed to initialize ImGui Vulkan backend"};
+  }
+
+  RL_UI_INFO("ImGui Vulkan backend ready: images={}, min_images={}", render_target.image_count,
+             render_target.min_image_count);
 }
 
 imgui_layer::~imgui_layer() noexcept {
   ImGui::SetCurrentContext(imgui_context(context_));
+  if (device_ != VK_NULL_HANDLE) {
+    vkDeviceWaitIdle(device_);
+  }
+  ImGui_ImplVulkan_Shutdown();
   ImGui_ImplSDL3_Shutdown();
   ImGui::DestroyContext(imgui_context(context_));
 }
@@ -49,13 +98,35 @@ void imgui_layer::handle_event(const SDL_Event& event) noexcept {
 
 void imgui_layer::begin_frame() {
   ImGui::SetCurrentContext(imgui_context(context_));
+  ImGui_ImplVulkan_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
+}
+
+void imgui_layer::draw_renderer_status(const rl::vulkan::renderer_status& status) {
+  ImGui::SetCurrentContext(imgui_context(context_));
+
+  ImGui::SetNextWindowPos(ImVec2{12.0f, 12.0f}, ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2{300.0f, 0.0f}, ImGuiCond_FirstUseEver);
+
+  if (ImGui::Begin("RenderLab")) {
+    text_unformatted(fmt::format("Frame: {}", status.frame_index));
+    text_unformatted(fmt::format("Swapchain: {}x{}, images={}", status.swapchain_extent.width,
+                                 status.swapchain_extent.height, status.swapchain_image_count));
+    text_unformatted(fmt::format("Frame graph passes: {}", status.frame_graph_pass_count));
+    text_unformatted(fmt::format("Suspended: {}", status.suspended ? "yes" : "no"));
+  }
+  ImGui::End();
 }
 
 void imgui_layer::end_frame() {
   ImGui::SetCurrentContext(imgui_context(context_));
   ImGui::Render();
+}
+
+void imgui_layer::render(VkCommandBuffer command_buffer) {
+  ImGui::SetCurrentContext(imgui_context(context_));
+  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffer);
 }
 
 }  // namespace rl::ui

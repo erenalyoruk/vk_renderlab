@@ -2,9 +2,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <vector>
 
+#include <vulkan/vulkan.h>
 #include <vulkan/vulkan_raii.hpp>
 
 #include "base/noncopyable.hpp"
@@ -37,8 +39,16 @@ struct renderer_status {
   bool swapchain_ready = false;
 };
 
+struct renderer_ui_render_target {
+  VkFormat color_format = VK_FORMAT_UNDEFINED;
+  std::uint32_t min_image_count = 2;
+  std::uint32_t image_count = 2;
+};
+
 class renderer final : public noncopyable {
  public:
+  using overlay_record_callback = std::function<void(VkCommandBuffer)>;
+
   renderer(const vulkan_context& context, platform::extent2d drawable_extent, renderer_settings settings = {});
   ~renderer() noexcept;
 
@@ -51,11 +61,12 @@ class renderer final : public noncopyable {
   void handle_event(const platform::platform_event& event);
   void set_drawable_extent(platform::extent2d drawable_extent);
   void set_suspended(bool suspended);
-  void draw_frame();
+  void draw_frame(const overlay_record_callback& overlay = {});
 
   [[nodiscard]] renderer_settings& settings() noexcept;
   [[nodiscard]] const renderer_settings& settings() const noexcept;
   [[nodiscard]] renderer_status status() const noexcept;
+  [[nodiscard]] renderer_ui_render_target ui_render_target() const noexcept;
   [[nodiscard]] bool suspended() const noexcept;
 
  private:
@@ -79,8 +90,10 @@ class renderer final : public noncopyable {
   void create_depth_resources();
   void create_debug_pipeline();
   void build_frame_graph(std::size_t image_index);
-  void record_frame_commands(frame_resources& frame, std::size_t image_index);
-  void draw_frame_impl();
+  void record_frame_commands(frame_resources& frame, std::size_t image_index, const overlay_record_callback& overlay);
+  void record_overlay_commands(const vk::raii::CommandBuffer& command_buffer, std::size_t image_index,
+                               const overlay_record_callback& overlay);
+  void draw_frame_impl(const overlay_record_callback& overlay);
   void wait_device_idle() noexcept;
 
   const vulkan_context& context_;
@@ -105,6 +118,7 @@ class renderer final : public noncopyable {
 
   platform::extent2d drawable_extent_{};
   vk::SurfaceFormatKHR surface_format_{};
+  std::uint32_t swapchain_min_image_count_ = 2;
   vk::Format depth_format_ = vk::Format::eUndefined;
   vk::PresentModeKHR present_mode_ = vk::PresentModeKHR::eFifo;
   vk::Extent2D swapchain_extent_{};

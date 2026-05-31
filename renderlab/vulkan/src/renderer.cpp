@@ -102,6 +102,31 @@ constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/tr
   return create_info;
 }
 
+[[nodiscard]] vk::ImageSubresourceRange color_subresource_range() noexcept {
+  vk::ImageSubresourceRange result{};
+  result.aspectMask = vk::ImageAspectFlagBits::eColor;
+  result.baseMipLevel = 0;
+  result.levelCount = 1;
+  result.baseArrayLayer = 0;
+  result.layerCount = 1;
+  return result;
+}
+
+[[nodiscard]] vk::ImageMemoryBarrier2 make_color_layout_barrier(
+    vk::Image image, vk::ImageLayout old_layout, vk::ImageLayout new_layout, vk::PipelineStageFlags2 src_stage,
+    vk::AccessFlags2 src_access, vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) noexcept {
+  vk::ImageMemoryBarrier2 barrier{};
+  barrier.srcStageMask = src_stage;
+  barrier.srcAccessMask = src_access;
+  barrier.dstStageMask = dst_stage;
+  barrier.dstAccessMask = dst_access;
+  barrier.oldLayout = old_layout;
+  barrier.newLayout = new_layout;
+  barrier.image = image;
+  barrier.subresourceRange = color_subresource_range();
+  return barrier;
+}
+
 [[nodiscard]] vk::ImageViewCreateInfo make_depth_image_view_create_info(vk::Image image, vk::Format format) noexcept {
   vk::ImageViewCreateInfo create_info{};
   create_info.image = image;
@@ -211,13 +236,13 @@ void renderer::set_suspended(bool suspended) {
   recreate_swapchain();
 }
 
-void renderer::draw_frame() {
+void renderer::draw_frame(const overlay_record_callback& overlay) {
   if (!can_render()) {
     return;
   }
 
   try {
-    draw_frame_impl();
+    draw_frame_impl(overlay);
   } catch (const vk::OutOfDateKHRError&) {
     wait_device_idle();
     recreate_swapchain();
@@ -238,6 +263,14 @@ renderer_status renderer::status() const noexcept {
     .path = settings_.path,
     .suspended = suspended_,
     .swapchain_ready = static_cast<bool>(*swapchain_) && has_drawable_extent(),
+  };
+}
+
+renderer_ui_render_target renderer::ui_render_target() const noexcept {
+  return renderer_ui_render_target{
+    .color_format = static_cast<VkFormat>(surface_format_.format),
+    .min_image_count = swapchain_min_image_count_,
+    .image_count = static_cast<std::uint32_t>(swapchain_images_.size()),
   };
 }
 
@@ -342,6 +375,7 @@ void renderer::recreate_swapchain() {
   surface_format_ = choose_surface_format(formats);
   present_mode_ = choose_present_mode(present_modes, settings_.preferred_present_mode);
   swapchain_extent_ = choose_swapchain_extent(capabilities, drawable_extent_);
+  swapchain_min_image_count_ = std::max(2u, capabilities.minImageCount);
 
   vk::SwapchainCreateInfoKHR create_info{};
   create_info.surface = surface;
@@ -493,7 +527,8 @@ void renderer::build_frame_graph(std::size_t image_index) {
                                               });
 }
 
-void renderer::record_frame_commands(frame_resources& frame, std::size_t image_index) {
+void renderer::record_frame_commands(frame_resources& frame, std::size_t image_index,
+                                     const overlay_record_callback& overlay) {
   const vk::raii::CommandBuffer& command_buffer = frame.command_buffer;
   command_buffer.reset();
 
@@ -503,6 +538,10 @@ void renderer::record_frame_commands(frame_resources& frame, std::size_t image_i
   begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
   command_buffer.begin(begin_info);
   frame_graph_.execute(command_buffer);
+
+  image_layouts_.at(image_index) = vk::ImageLayout::ePresentSrcKHR;
+  record_overlay_commands(command_buffer, image_index, overlay);
+
   command_buffer.end();
 
   image_layouts_.at(image_index) = vk::ImageLayout::ePresentSrcKHR;
@@ -511,7 +550,52 @@ void renderer::record_frame_commands(frame_resources& frame, std::size_t image_i
   }
 }
 
-void renderer::draw_frame_impl() {
+void renderer::record_overlay_commands(const vk::raii::CommandBuffer& command_buffer, std::size_t image_index,
+                                       const overlay_record_callback& overlay) {
+  if (!overlay) {
+    return;
+  }
+
+  const vk::Image swapchain_image = swapchain_images_.at(image_index);
+
+  const vk::ImageMemoryBarrier2 to_color_attachment = make_color_layout_barrier(
+      swapchain_image, image_layouts_.at(image_index), vk::ImageLayout::eColorAttachmentOptimal,
+      vk::PipelineStageFlagBits2::eAllCommands, vk::AccessFlagBits2::eNone,
+      vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eColorAttachmentWrite);
+
+  vk::DependencyInfo to_color_attachment_dependency{};
+  to_color_attachment_dependency.setImageMemoryBarriers(to_color_attachment);
+  command_buffer.pipelineBarrier2(to_color_attachment_dependency);
+
+  vk::RenderingAttachmentInfo color_attachment{};
+  color_attachment.imageView = *swapchain_image_views_.at(image_index);
+  color_attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+  color_attachment.loadOp = vk::AttachmentLoadOp::eLoad;
+  color_attachment.storeOp = vk::AttachmentStoreOp::eStore;
+
+  vk::RenderingInfo rendering_info{};
+  rendering_info.renderArea.offset = vk::Offset2D{0, 0};
+  rendering_info.renderArea.extent = swapchain_extent_;
+  rendering_info.layerCount = 1;
+  rendering_info.setColorAttachments(color_attachment);
+
+  command_buffer.beginRendering(rendering_info);
+  overlay(static_cast<VkCommandBuffer>(*command_buffer));
+  command_buffer.endRendering();
+
+  const vk::ImageMemoryBarrier2 to_present = make_color_layout_barrier(
+      swapchain_image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
+      vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eColorAttachmentWrite,
+      vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone);
+
+  vk::DependencyInfo to_present_dependency{};
+  to_present_dependency.setImageMemoryBarriers(to_present);
+  command_buffer.pipelineBarrier2(to_present_dependency);
+
+  image_layouts_.at(image_index) = vk::ImageLayout::ePresentSrcKHR;
+}
+
+void renderer::draw_frame_impl(const overlay_record_callback& overlay) {
   frame_resources& frame = frames_.at(current_frame_);
   if (!wait_for_timeline_value(frame.timeline_value)) {
     return;
@@ -525,7 +609,7 @@ void renderer::draw_frame_impl() {
     return;
   }
 
-  record_frame_commands(frame, image_index);
+  record_frame_commands(frame, image_index, overlay);
 
   const std::uint64_t signal_timeline_value = next_timeline_value_++;
   const std::array wait_semaphores = {

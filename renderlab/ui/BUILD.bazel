@@ -11,6 +11,9 @@ cc_library(
     deps = [
         "//renderlab/base",
         "//renderlab/platform",
+        "//renderlab/vulkan",
         "@imgui//:imgui_sdl3_backend",
+        "@imgui//:imgui_vulkan_backend",
+        "@vk_sdk//:vulkan",
     ],
 )
