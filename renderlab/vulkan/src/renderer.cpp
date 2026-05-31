@@ -199,7 +199,10 @@ constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/tr
 }  // namespace
 
 renderer::renderer(const vulkan_context& context, platform::extent2d drawable_extent, renderer_settings settings)
-    : context_{context}, settings_{settings}, drawable_extent_{drawable_extent} {
+    : context_{context},
+      settings_{settings},
+      gpu_name_{physical_device_name(context.selected_physical_device().properties)},
+      drawable_extent_{drawable_extent} {
   settings_.max_frames_in_flight = clamp_frame_count(settings_.max_frames_in_flight);
   create_command_pool();
   create_frame_resources();
@@ -310,6 +313,7 @@ const renderer_settings& renderer::settings() const noexcept { return settings_;
 
 renderer_status renderer::status() const noexcept {
   return renderer_status{
+    .gpu_name = gpu_name_,
     .drawable_extent = drawable_extent_,
     .swapchain_extent = swapchain_extent_,
     .swapchain_image_count = static_cast<std::uint32_t>(swapchain_images_.size()),

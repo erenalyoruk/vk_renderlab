@@ -231,6 +231,7 @@ void imgui_layer::draw_renderer_panel(const rl::vulkan::renderer_status& status,
 
     ImGui::SeparatorText("Status");
     draw_frame_timing_status();
+    text_unformatted(fmt::format("GPU: {}", status.gpu_name));
     text_unformatted(fmt::format("Frame: {}", status.frame_index));
     text_unformatted(fmt::format("Frames in flight: {}", status.frames_in_flight));
     text_unformatted(fmt::format("Render path: {}", rl::vulkan::to_string(status.path)));

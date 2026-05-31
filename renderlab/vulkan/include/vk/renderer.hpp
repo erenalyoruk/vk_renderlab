@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include <vulkan/vulkan.h>
@@ -30,6 +31,7 @@ struct renderer_settings {
 };
 
 struct renderer_status {
+  std::string gpu_name;
   platform::extent2d drawable_extent{};
   vk::Extent2D swapchain_extent{};
   std::uint32_t swapchain_image_count = 0;
@@ -108,6 +110,7 @@ class renderer final : public noncopyable {
 
   const vulkan_context& context_;
   renderer_settings settings_;
+  std::string gpu_name_;
 
   vk::raii::CommandPool command_pool_{nullptr};
   std::vector<frame_resources> frames_;
