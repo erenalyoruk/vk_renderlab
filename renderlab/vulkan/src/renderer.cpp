@@ -655,7 +655,7 @@ void renderer::recreate_swapchain() {
 }
 
 void renderer::release_swapchain() noexcept {
-  debug_triangle_pipeline_.reset();
+  debug_cube_pipeline_.reset();
   depth_image_views_.clear();
   depth_images_.clear();
   depth_layouts_.clear();
@@ -717,15 +717,15 @@ void renderer::create_debug_pipeline() {
   const std::array vertex_attributes = make_debug_vertex_attributes();
   const std::array descriptor_set_layouts = {*debug_scene_descriptor_set_layout_};
 
-  debug_triangle_pipeline_.emplace(context_.device().handle(), graphics_pipeline_description{
-                                                                 .vertex_shader = std::cref(*debug_vertex_shader_),
-                                                                 .fragment_shader = std::cref(*debug_fragment_shader_),
-                                                                 .vertex_bindings = vertex_bindings,
-                                                                 .vertex_attributes = vertex_attributes,
-                                                                 .descriptor_set_layouts = descriptor_set_layouts,
-                                                                 .color_format = surface_format_.format,
-                                                                 .depth_format = depth_format_,
-                                                               });
+  debug_cube_pipeline_.emplace(context_.device().handle(), graphics_pipeline_description{
+                                                             .vertex_shader = std::cref(*debug_vertex_shader_),
+                                                             .fragment_shader = std::cref(*debug_fragment_shader_),
+                                                             .vertex_bindings = vertex_bindings,
+                                                             .vertex_attributes = vertex_attributes,
+                                                             .descriptor_set_layouts = descriptor_set_layouts,
+                                                             .color_format = surface_format_.format,
+                                                             .depth_format = depth_format_,
+                                                           });
 
   RL_SHADER_INFO("debug cube pipeline ready: color_format={}", vk::to_string(surface_format_.format));
 }
@@ -753,11 +753,11 @@ void renderer::update_debug_scene_uniforms(std::size_t frame_index) {
 
 void renderer::build_frame_graph(std::size_t image_index) {
   const optional_device_features& optional_features = context_.device().optional_features();
-  const bool has_debug_draw = debug_triangle_pipeline_.has_value() && debug_vertex_buffer_ && debug_index_buffer_ &&
+  const bool has_debug_draw = debug_cube_pipeline_.has_value() && debug_vertex_buffer_ && debug_index_buffer_ &&
                               current_frame_ < debug_scene_descriptor_sets_.size();
   const std::optional<render_path_debug_draw> debug_draw =
       has_debug_draw ? std::optional<render_path_debug_draw>{render_path_debug_draw{
-                         .pipeline = &*debug_triangle_pipeline_,
+                         .pipeline = &*debug_cube_pipeline_,
                          .vertex_buffer = debug_vertex_buffer_.handle(),
                          .index_buffer = debug_index_buffer_.handle(),
                          .descriptor_set = *debug_scene_descriptor_sets_.at(current_frame_),

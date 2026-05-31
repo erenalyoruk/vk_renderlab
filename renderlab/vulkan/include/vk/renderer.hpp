@@ -142,7 +142,7 @@ class renderer final : public noncopyable {
   std::vector<vk::ImageLayout> depth_layouts_;
   std::optional<shader_module> debug_vertex_shader_;
   std::optional<shader_module> debug_fragment_shader_;
-  std::optional<graphics_pipeline> debug_triangle_pipeline_;
+  std::optional<graphics_pipeline> debug_cube_pipeline_;
 
   platform::extent2d drawable_extent_{};
   vk::SurfaceFormatKHR surface_format_{};
