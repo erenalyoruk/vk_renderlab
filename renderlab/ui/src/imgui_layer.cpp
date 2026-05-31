@@ -101,6 +101,16 @@ void draw_present_mode_control(rl::vulkan::renderer& renderer) {
   ImGui::EndCombo();
 }
 
+void draw_frame_count_control(rl::vulkan::renderer& renderer) {
+  constexpr int min_frames_in_flight = 1;
+  constexpr int max_frames_in_flight = 3;
+
+  int frames_in_flight = static_cast<int>(renderer.settings().max_frames_in_flight);
+  if (ImGui::SliderInt("Frames in flight", &frames_in_flight, min_frames_in_flight, max_frames_in_flight)) {
+    renderer.set_max_frames_in_flight(static_cast<std::uint32_t>(frames_in_flight));
+  }
+}
+
 }  // namespace
 
 imgui_layer::imgui_layer(rl::platform::sdl_window& window, const rl::vulkan::vulkan_context& context,
@@ -195,9 +205,11 @@ void imgui_layer::draw_renderer_panel(const rl::vulkan::renderer_status& status,
   if (ImGui::Begin("RenderLab")) {
     draw_renderer_settings(renderer.settings());
     draw_present_mode_control(renderer);
+    draw_frame_count_control(renderer);
 
     ImGui::SeparatorText("Status");
     text_unformatted(fmt::format("Frame: {}", status.frame_index));
+    text_unformatted(fmt::format("Frames in flight: {}", status.frames_in_flight));
     text_unformatted(fmt::format("Render path: {}", rl::vulkan::to_string(status.path)));
     text_unformatted(fmt::format("Present mode: {}", vk::to_string(status.present_mode)));
     text_unformatted(fmt::format("Swapchain: {}x{}, images={}", status.swapchain_extent.width,

@@ -245,6 +245,21 @@ void renderer::set_preferred_present_mode(vk::PresentModeKHR present_mode) {
   swapchain_recreate_requested_ = true;
 }
 
+void renderer::set_max_frames_in_flight(std::uint32_t frames_in_flight) {
+  const std::uint32_t clamped_frames_in_flight = clamp_frame_count(frames_in_flight);
+  if (settings_.max_frames_in_flight == clamped_frames_in_flight) {
+    return;
+  }
+
+  wait_device_idle();
+
+  settings_.max_frames_in_flight = clamped_frames_in_flight;
+  current_frame_ = 0;
+  next_timeline_value_ = 1;
+  image_timeline_values_.assign(swapchain_images_.size(), 0);
+  create_frame_resources();
+}
+
 void renderer::apply_pending_settings() {
   if (!swapchain_recreate_requested_ || suspended_ || !has_drawable_extent()) {
     return;
@@ -279,6 +294,7 @@ renderer_status renderer::status() const noexcept {
     .swapchain_generation = swapchain_generation_,
     .frame_index = frame_index_,
     .frame_graph_pass_count = static_cast<std::uint32_t>(frame_graph_.passes().size()),
+    .frames_in_flight = static_cast<std::uint32_t>(frames_.size()),
     .path = settings_.path,
     .present_mode = present_mode_,
     .suspended = suspended_,
