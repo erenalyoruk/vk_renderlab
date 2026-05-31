@@ -59,10 +59,12 @@ void append_extension_with_dependencies(physical_device_info& info, std::string_
 }
 
 [[nodiscard]] physical_device_feature_set query_features(const vk::raii::PhysicalDevice& device) {
-  auto feature_chain = device.getFeatures2<
-      vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan12Features,
-      vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceDescriptorBufferFeaturesEXT,
-      vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT, vk::PhysicalDeviceMeshShaderFeaturesEXT>();
+  auto feature_chain =
+      device.getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
+                          vk::PhysicalDeviceVulkan12Features, vk::PhysicalDeviceVulkan13Features,
+                          vk::PhysicalDeviceDescriptorBufferFeaturesEXT,
+                          vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT, vk::PhysicalDeviceMeshShaderFeaturesEXT,
+                          vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesEXT>();
 
   auto& features2 = feature_chain.get<vk::PhysicalDeviceFeatures2>();
 
@@ -74,6 +76,7 @@ void append_extension_with_dependencies(physical_device_info& info, std::string_
   result.descriptor_buffer = feature_chain.get<vk::PhysicalDeviceDescriptorBufferFeaturesEXT>();
   result.graphics_pipeline_library = feature_chain.get<vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT>();
   result.mesh_shader = feature_chain.get<vk::PhysicalDeviceMeshShaderFeaturesEXT>();
+  result.present_mode_fifo_latest_ready = feature_chain.get<vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesEXT>();
 
   result.vulkan11.pNext = nullptr;
   result.vulkan12.pNext = nullptr;
@@ -81,6 +84,7 @@ void append_extension_with_dependencies(physical_device_info& info, std::string_
   result.descriptor_buffer.pNext = nullptr;
   result.graphics_pipeline_library.pNext = nullptr;
   result.mesh_shader.pNext = nullptr;
+  result.present_mode_fifo_latest_ready.pNext = nullptr;
 
   return result;
 }
@@ -250,6 +254,12 @@ void populate_enabled_extensions(physical_device_info& info, const device_requir
   if (contains_extension(info.extensions, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
     info.optional_features.memory_budget = true;
     append_extension_with_dependencies(info, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+  }
+
+  if (contains_extension(info.extensions, VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME) &&
+      info.features.present_mode_fifo_latest_ready.presentModeFifoLatestReady == vk::True) {
+    info.optional_features.present_mode_fifo_latest_ready = true;
+    append_extension_with_dependencies(info, VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME);
   }
 
   info.optional_features.scalar_block_layout = info.features.vulkan12.scalarBlockLayout == vk::True;

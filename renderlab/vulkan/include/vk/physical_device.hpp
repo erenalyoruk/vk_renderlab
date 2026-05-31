@@ -43,6 +43,7 @@ struct physical_device_feature_set {
   vk::PhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer{};
   vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT graphics_pipeline_library{};
   vk::PhysicalDeviceMeshShaderFeaturesEXT mesh_shader{};
+  vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesEXT present_mode_fifo_latest_ready{};
 };
 
 struct physical_device_limit_set {
@@ -59,6 +60,7 @@ struct optional_device_features {
   bool scalar_block_layout = false;
   bool host_query_reset = false;
   bool multi_draw_indirect = false;
+  bool present_mode_fifo_latest_ready = false;
 };
 
 struct device_requirements {

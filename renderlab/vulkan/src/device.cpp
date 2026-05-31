@@ -24,7 +24,8 @@ using device_feature_chain =
     vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
                        vk::PhysicalDeviceVulkan12Features, vk::PhysicalDeviceVulkan13Features,
                        vk::PhysicalDeviceDescriptorBufferFeaturesEXT,
-                       vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT, vk::PhysicalDeviceMeshShaderFeaturesEXT>;
+                       vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT, vk::PhysicalDeviceMeshShaderFeaturesEXT,
+                       vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesEXT>;
 
 [[nodiscard]] bool extension_enabled(const physical_device_info& physical_device, std::string_view extension_name) {
   return std::ranges::any_of(physical_device.enabled_extensions,
@@ -69,6 +70,8 @@ device::device(const vk::raii::PhysicalDevice& physical_device_handle, const phy
   auto& descriptor_buffer_features = feature_chain.get<vk::PhysicalDeviceDescriptorBufferFeaturesEXT>();
   auto& graphics_pipeline_library_features = feature_chain.get<vk::PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT>();
   auto& mesh_shader_features = feature_chain.get<vk::PhysicalDeviceMeshShaderFeaturesEXT>();
+  auto& present_mode_fifo_latest_ready_features =
+      feature_chain.get<vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesEXT>();
 
   vulkan11_features.shaderDrawParameters =
       static_cast<vk::Bool32>(requirements.require_shader_draw_parameters ||
@@ -103,6 +106,8 @@ device::device(const vk::raii::PhysicalDevice& physical_device_handle, const phy
 
   mesh_shader_features.meshShader = static_cast<vk::Bool32>(physical_device.optional_features.mesh_shader);
   mesh_shader_features.taskShader = static_cast<vk::Bool32>(physical_device.optional_features.task_shader);
+  present_mode_fifo_latest_ready_features.presentModeFifoLatestReady =
+      static_cast<vk::Bool32>(physical_device.optional_features.present_mode_fifo_latest_ready);
 
   enabled_features.features.samplerAnisotropy = static_cast<vk::Bool32>(requirements.require_sampler_anisotropy);
   enabled_features.features.drawIndirectFirstInstance = physical_device.features.core.drawIndirectFirstInstance;
@@ -119,6 +124,10 @@ device::device(const vk::raii::PhysicalDevice& physical_device_handle, const phy
 
   if (!extension_enabled(physical_device, VK_EXT_MESH_SHADER_EXTENSION_NAME)) {
     feature_chain.unlink<vk::PhysicalDeviceMeshShaderFeaturesEXT>();
+  }
+
+  if (!extension_enabled(physical_device, VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME)) {
+    feature_chain.unlink<vk::PhysicalDevicePresentModeFifoLatestReadyFeaturesEXT>();
   }
 
   for (std::size_t index = 0; index < physical_device.enabled_extensions.size(); ++index) {

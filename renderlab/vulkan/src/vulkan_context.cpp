@@ -393,11 +393,13 @@ void vulkan_context::enumerate_and_select_physical_device() {
     RL_GPU_DEBUG(
         "GPU[{}] optional features: descriptor_buffer={}, graphics_pipeline_library={}, mesh_shader={}, "
         "task_shader={}, "
-        "memory_budget={}, scalar_block_layout={}, host_query_reset={}, multi_draw_indirect={}",
+        "memory_budget={}, scalar_block_layout={}, host_query_reset={}, multi_draw_indirect={}, "
+        "present_mode_fifo_latest_ready={}",
         index, device.optional_features.descriptor_buffer, device.optional_features.graphics_pipeline_library,
         device.optional_features.mesh_shader, device.optional_features.task_shader,
         device.optional_features.memory_budget, device.optional_features.scalar_block_layout,
-        device.optional_features.host_query_reset, device.optional_features.multi_draw_indirect);
+        device.optional_features.host_query_reset, device.optional_features.multi_draw_indirect,
+        device.optional_features.present_mode_fifo_latest_ready);
 
     for (const queue_family_info& family : device.queue_families) {
       RL_GPU_TRACE("GPU[{}] queue_family[{}]: flags={} queues={} present={}", index, family.index,
