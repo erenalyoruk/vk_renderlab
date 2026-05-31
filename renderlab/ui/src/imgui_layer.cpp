@@ -189,6 +189,11 @@ void imgui_layer::update_render_target(imgui_render_target render_target) {
   render_target_ = render_target;
 }
 
+bool imgui_layer::wants_keyboard_capture() const noexcept {
+  ImGui::SetCurrentContext(imgui_context(context_));
+  return ImGui::GetIO().WantCaptureKeyboard;
+}
+
 void imgui_layer::begin_frame() {
   ImGui::SetCurrentContext(imgui_context(context_));
   ImGui_ImplVulkan_NewFrame();

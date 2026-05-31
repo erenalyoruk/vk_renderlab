@@ -105,10 +105,15 @@ void process_action(const rl::platform::input_action_event& action, bool& runnin
 void process_platform_events(const std::vector<rl::platform::platform_event>& events,
                              rl::platform::input_state& input_state,
                              const rl::platform::event_dispatcher& event_dispatcher,
-                             const rl::platform::input_action_map& input_actions, bool& running) {
+                             const rl::platform::input_action_map& input_actions, bool keyboard_captured,
+                             bool& running) {
   for (const rl::platform::platform_event& event : events) {
     input_state.apply(event);
     event_dispatcher.dispatch(event);
+
+    if (keyboard_captured) {
+      continue;
+    }
 
     const std::vector<rl::platform::input_action_event> actions = input_actions.translate(event);
     for (const rl::platform::input_action_event& action : actions) {
@@ -164,7 +169,8 @@ int main() {
     while (running && !window.state().close_requested) {
       const std::vector<rl::platform::platform_event> events =
           window.poll_events([&imgui_layer](const SDL_Event& event) { imgui_layer.handle_event(event); });
-      process_platform_events(events, input_state, event_dispatcher, input_actions, running);
+      process_platform_events(events, input_state, event_dispatcher, input_actions,
+                              imgui_layer.wants_keyboard_capture(), running);
       renderer.apply_pending_settings();
 
       const rl::vulkan::renderer_ui_render_target current_renderer_ui_target = renderer.ui_render_target();

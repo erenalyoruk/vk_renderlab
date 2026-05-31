@@ -40,6 +40,7 @@ class imgui_layer final : public noncopyable {
 
   void handle_event(const SDL_Event& event) noexcept;
   void update_render_target(imgui_render_target render_target);
+  [[nodiscard]] bool wants_keyboard_capture() const noexcept;
   void begin_frame();
   void draw_renderer_panel(const rl::vulkan::renderer_status& status, rl::vulkan::renderer& renderer);
   void end_frame();
