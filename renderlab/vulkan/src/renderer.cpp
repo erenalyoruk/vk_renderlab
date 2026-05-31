@@ -30,6 +30,7 @@ namespace {
 
 constexpr std::uint32_t min_frames_in_flight = 1;
 constexpr std::uint32_t max_frames_in_flight = 3;
+constexpr std::uint64_t bytes_per_mib = std::uint64_t{1024} * std::uint64_t{1024};
 constexpr std::string_view triangle_vertex_shader_path = "renderlab/shaders/triangle.vert.spv";
 constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/triangle.frag.spv";
 
@@ -38,6 +39,8 @@ constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/tr
 [[nodiscard]] std::uint32_t clamp_frame_count(std::uint32_t frame_count) noexcept {
   return std::clamp(frame_count, min_frames_in_flight, max_frames_in_flight);
 }
+
+[[nodiscard]] std::uint64_t bytes_to_mib(std::uint64_t bytes) noexcept { return bytes / bytes_per_mib; }
 
 [[nodiscard]] vk::SurfaceFormatKHR choose_surface_format(const std::vector<vk::SurfaceFormatKHR>& formats) {
   const auto preferred = std::ranges::find_if(formats, [](const vk::SurfaceFormatKHR& format) {
@@ -202,6 +205,10 @@ renderer::renderer(const vulkan_context& context, platform::extent2d drawable_ex
     : context_{context},
       settings_{settings},
       gpu_name_{physical_device_name(context.selected_physical_device().properties)},
+      gpu_type_{physical_device_type_to_string(context.selected_physical_device().properties.deviceType)},
+      gpu_api_version_{api_version_to_string(context.selected_physical_device().properties.apiVersion)},
+      gpu_local_memory_mib_{
+        bytes_to_mib(device_local_memory_bytes(context.selected_physical_device().memory_properties))},
       drawable_extent_{drawable_extent} {
   settings_.max_frames_in_flight = clamp_frame_count(settings_.max_frames_in_flight);
   create_command_pool();
@@ -314,6 +321,9 @@ const renderer_settings& renderer::settings() const noexcept { return settings_;
 renderer_status renderer::status() const noexcept {
   return renderer_status{
     .gpu_name = gpu_name_,
+    .gpu_type = gpu_type_,
+    .gpu_api_version = gpu_api_version_,
+    .gpu_local_memory_mib = gpu_local_memory_mib_,
     .drawable_extent = drawable_extent_,
     .swapchain_extent = swapchain_extent_,
     .swapchain_image_count = static_cast<std::uint32_t>(swapchain_images_.size()),
