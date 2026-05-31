@@ -236,6 +236,24 @@ void renderer::set_suspended(bool suspended) {
   recreate_swapchain();
 }
 
+void renderer::set_preferred_present_mode(vk::PresentModeKHR present_mode) {
+  if (settings_.preferred_present_mode == present_mode) {
+    return;
+  }
+
+  settings_.preferred_present_mode = present_mode;
+  swapchain_recreate_requested_ = true;
+}
+
+void renderer::apply_pending_settings() {
+  if (!swapchain_recreate_requested_ || suspended_ || !has_drawable_extent()) {
+    return;
+  }
+
+  wait_device_idle();
+  recreate_swapchain();
+}
+
 void renderer::draw_frame(const overlay_record_callback& overlay) {
   if (!can_render()) {
     return;
@@ -262,6 +280,7 @@ renderer_status renderer::status() const noexcept {
     .frame_index = frame_index_,
     .frame_graph_pass_count = static_cast<std::uint32_t>(frame_graph_.passes().size()),
     .path = settings_.path,
+    .present_mode = present_mode_,
     .suspended = suspended_,
     .swapchain_ready = static_cast<bool>(*swapchain_) && has_drawable_extent(),
   };
@@ -421,6 +440,7 @@ void renderer::recreate_swapchain() {
   }
 
   ++swapchain_generation_;
+  swapchain_recreate_requested_ = false;
 
   RL_RENDER_INFO("swapchain ready: {}x{}, images={}, frames_in_flight={}, present_mode={}", swapchain_extent_.width,
                  swapchain_extent_.height, swapchain_images_.size(), frames_.size(), vk::to_string(present_mode_));

@@ -37,6 +37,7 @@ struct renderer_status {
   std::uint64_t frame_index = 0;
   std::uint32_t frame_graph_pass_count = 0;
   render_path path = render_path::forward_plus;
+  vk::PresentModeKHR present_mode = vk::PresentModeKHR::eFifo;
   bool suspended = false;
   bool swapchain_ready = false;
 };
@@ -64,6 +65,8 @@ class renderer final : public noncopyable {
   void handle_event(const platform::platform_event& event);
   void set_drawable_extent(platform::extent2d drawable_extent);
   void set_suspended(bool suspended);
+  void set_preferred_present_mode(vk::PresentModeKHR present_mode);
+  void apply_pending_settings();
   void draw_frame(const overlay_record_callback& overlay = {});
 
   [[nodiscard]] renderer_settings& settings() noexcept;
@@ -132,6 +135,7 @@ class renderer final : public noncopyable {
   std::uint64_t frame_index_ = 0;
   std::uint64_t next_timeline_value_ = 1;
   bool suspended_ = false;
+  bool swapchain_recreate_requested_ = false;
 };
 
 }  // namespace rl::vulkan

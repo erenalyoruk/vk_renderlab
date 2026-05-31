@@ -165,6 +165,7 @@ int main() {
       const std::vector<rl::platform::platform_event> events =
           window.poll_events([&imgui_layer](const SDL_Event& event) { imgui_layer.handle_event(event); });
       process_platform_events(events, input_state, event_dispatcher, input_actions, running);
+      renderer.apply_pending_settings();
 
       const rl::vulkan::renderer_ui_render_target current_renderer_ui_target = renderer.ui_render_target();
       imgui_layer.update_render_target(rl::ui::imgui_render_target{
@@ -175,7 +176,7 @@ int main() {
       });
 
       imgui_layer.begin_frame();
-      imgui_layer.draw_renderer_panel(renderer.status(), renderer.settings());
+      imgui_layer.draw_renderer_panel(renderer.status(), renderer);
       imgui_layer.end_frame();
 
       if (renderer.suspended()) {

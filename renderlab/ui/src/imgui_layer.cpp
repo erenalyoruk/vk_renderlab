@@ -73,6 +73,34 @@ void draw_renderer_settings(rl::vulkan::renderer_settings& settings) {
   ImGui::Checkbox("Recreate on suboptimal swapchain", &settings.recreate_swapchain_on_suboptimal);
 }
 
+void draw_present_mode_control(rl::vulkan::renderer& renderer) {
+  constexpr std::array present_modes{
+    vk::PresentModeKHR::eFifo,
+    vk::PresentModeKHR::eMailbox,
+    vk::PresentModeKHR::eImmediate,
+    vk::PresentModeKHR::eFifoRelaxed,
+  };
+
+  const rl::vulkan::renderer_settings& settings = renderer.settings();
+  const std::string current_present_mode = vk::to_string(settings.preferred_present_mode);
+  if (!ImGui::BeginCombo("Preferred present mode", current_present_mode.c_str())) {
+    return;
+  }
+
+  for (const vk::PresentModeKHR present_mode : present_modes) {
+    const std::string present_mode_name = vk::to_string(present_mode);
+    const bool selected = settings.preferred_present_mode == present_mode;
+    if (ImGui::Selectable(present_mode_name.c_str(), selected)) {
+      renderer.set_preferred_present_mode(present_mode);
+    }
+    if (selected) {
+      ImGui::SetItemDefaultFocus();
+    }
+  }
+
+  ImGui::EndCombo();
+}
+
 }  // namespace
 
 imgui_layer::imgui_layer(rl::platform::sdl_window& window, const rl::vulkan::vulkan_context& context,
@@ -158,19 +186,20 @@ void imgui_layer::begin_frame() {
   ImGui::NewFrame();
 }
 
-void imgui_layer::draw_renderer_panel(const rl::vulkan::renderer_status& status,
-                                      rl::vulkan::renderer_settings& settings) {
+void imgui_layer::draw_renderer_panel(const rl::vulkan::renderer_status& status, rl::vulkan::renderer& renderer) {
   ImGui::SetCurrentContext(imgui_context(context_));
 
   ImGui::SetNextWindowPos(ImVec2{12.0f, 12.0f}, ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2{340.0f, 0.0f}, ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("RenderLab")) {
-    draw_renderer_settings(settings);
+    draw_renderer_settings(renderer.settings());
+    draw_present_mode_control(renderer);
 
     ImGui::SeparatorText("Status");
     text_unformatted(fmt::format("Frame: {}", status.frame_index));
     text_unformatted(fmt::format("Render path: {}", rl::vulkan::to_string(status.path)));
+    text_unformatted(fmt::format("Present mode: {}", vk::to_string(status.present_mode)));
     text_unformatted(fmt::format("Swapchain: {}x{}, images={}", status.swapchain_extent.width,
                                  status.swapchain_extent.height, status.swapchain_image_count));
     text_unformatted(fmt::format("Swapchain generation: {}", status.swapchain_generation));
