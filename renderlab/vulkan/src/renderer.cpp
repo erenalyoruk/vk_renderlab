@@ -258,6 +258,7 @@ renderer_status renderer::status() const noexcept {
     .drawable_extent = drawable_extent_,
     .swapchain_extent = swapchain_extent_,
     .swapchain_image_count = static_cast<std::uint32_t>(swapchain_images_.size()),
+    .swapchain_generation = swapchain_generation_,
     .frame_index = frame_index_,
     .frame_graph_pass_count = static_cast<std::uint32_t>(frame_graph_.passes().size()),
     .path = settings_.path,
@@ -271,6 +272,7 @@ renderer_ui_render_target renderer::ui_render_target() const noexcept {
     .color_format = static_cast<VkFormat>(surface_format_.format),
     .min_image_count = swapchain_min_image_count_,
     .image_count = static_cast<std::uint32_t>(swapchain_images_.size()),
+    .generation = swapchain_generation_,
   };
 }
 
@@ -417,6 +419,8 @@ void renderer::recreate_swapchain() {
   for (std::size_t image_index = 0; image_index < swapchain_images_.size(); ++image_index) {
     render_finished_.emplace_back(context_.device().handle(), semaphore_create_info);
   }
+
+  ++swapchain_generation_;
 
   RL_RENDER_INFO("swapchain ready: {}x{}, images={}, frames_in_flight={}, present_mode={}", swapchain_extent_.width,
                  swapchain_extent_.height, swapchain_images_.size(), frames_.size(), vk::to_string(present_mode_));

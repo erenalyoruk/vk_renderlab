@@ -22,6 +22,7 @@ struct imgui_render_target {
   VkFormat color_format = VK_FORMAT_UNDEFINED;
   std::uint32_t min_image_count = 2;
   std::uint32_t image_count = 2;
+  std::uint64_t generation = 0;
 };
 
 class imgui_layer final : public noncopyable {
@@ -37,6 +38,7 @@ class imgui_layer final : public noncopyable {
   imgui_layer& operator=(imgui_layer&& other) noexcept = delete;
 
   void handle_event(const SDL_Event& event) noexcept;
+  void update_render_target(imgui_render_target render_target);
   void begin_frame();
   void draw_renderer_status(const rl::vulkan::renderer_status& status);
   void end_frame();
@@ -45,6 +47,7 @@ class imgui_layer final : public noncopyable {
  private:
   void* context_ = nullptr;
   VkDevice device_ = VK_NULL_HANDLE;
+  imgui_render_target render_target_{};
 };
 
 }  // namespace rl::ui

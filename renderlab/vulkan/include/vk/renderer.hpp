@@ -32,6 +32,7 @@ struct renderer_status {
   platform::extent2d drawable_extent{};
   vk::Extent2D swapchain_extent{};
   std::uint32_t swapchain_image_count = 0;
+  std::uint64_t swapchain_generation = 0;
   std::uint64_t frame_index = 0;
   std::uint32_t frame_graph_pass_count = 0;
   render_path path = render_path::forward_plus;
@@ -43,6 +44,7 @@ struct renderer_ui_render_target {
   VkFormat color_format = VK_FORMAT_UNDEFINED;
   std::uint32_t min_image_count = 2;
   std::uint32_t image_count = 2;
+  std::uint64_t generation = 0;
 };
 
 class renderer final : public noncopyable {
@@ -122,6 +124,7 @@ class renderer final : public noncopyable {
   vk::Format depth_format_ = vk::Format::eUndefined;
   vk::PresentModeKHR present_mode_ = vk::PresentModeKHR::eFifo;
   vk::Extent2D swapchain_extent_{};
+  std::uint64_t swapchain_generation_ = 0;
   frame_graph frame_graph_;
 
   std::size_t current_frame_ = 0;

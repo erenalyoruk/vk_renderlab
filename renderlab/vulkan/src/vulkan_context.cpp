@@ -14,7 +14,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): required by Vulkan-Hpp default dynamic dispatcher.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #include "base/log.hpp"

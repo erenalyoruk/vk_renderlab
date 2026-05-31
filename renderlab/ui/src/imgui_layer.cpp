@@ -39,7 +39,7 @@ void text_unformatted(const std::string& text) { ImGui::TextUnformatted(text.c_s
 
 imgui_layer::imgui_layer(rl::platform::sdl_window& window, const rl::vulkan::vulkan_context& context,
                          imgui_render_target render_target)
-    : context_{create_imgui_context()}, device_{context.c_device()} {
+    : context_{create_imgui_context()}, device_{context.c_device()}, render_target_{render_target} {
   ImGui::SetCurrentContext(imgui_context(context_));
 
   ImGuiIO& imgui_io = ImGui::GetIO();
@@ -96,6 +96,23 @@ void imgui_layer::handle_event(const SDL_Event& event) noexcept {
   ImGui_ImplSDL3_ProcessEvent(&event);
 }
 
+void imgui_layer::update_render_target(imgui_render_target render_target) {
+  if (render_target.generation == render_target_.generation) {
+    return;
+  }
+
+  if (render_target.color_format != render_target_.color_format) {
+    RL_UI_WARN("ImGui swapchain color format changed; keeping existing pipeline format");
+  }
+
+  if (render_target.min_image_count != render_target_.min_image_count) {
+    ImGui::SetCurrentContext(imgui_context(context_));
+    ImGui_ImplVulkan_SetMinImageCount(render_target.min_image_count);
+  }
+
+  render_target_ = render_target;
+}
+
 void imgui_layer::begin_frame() {
   ImGui::SetCurrentContext(imgui_context(context_));
   ImGui_ImplVulkan_NewFrame();
@@ -113,6 +130,7 @@ void imgui_layer::draw_renderer_status(const rl::vulkan::renderer_status& status
     text_unformatted(fmt::format("Frame: {}", status.frame_index));
     text_unformatted(fmt::format("Swapchain: {}x{}, images={}", status.swapchain_extent.width,
                                  status.swapchain_extent.height, status.swapchain_image_count));
+    text_unformatted(fmt::format("Swapchain generation: {}", status.swapchain_generation));
     text_unformatted(fmt::format("Frame graph passes: {}", status.frame_graph_pass_count));
     text_unformatted(fmt::format("Suspended: {}", status.suspended ? "yes" : "no"));
   }

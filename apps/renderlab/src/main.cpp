@@ -145,6 +145,7 @@ int main() {
                                       .color_format = renderer_ui_target.color_format,
                                       .min_image_count = renderer_ui_target.min_image_count,
                                       .image_count = renderer_ui_target.image_count,
+                                      .generation = renderer_ui_target.generation,
                                     }};
 
     RL_APP_INFO("bootstrap complete");
@@ -164,6 +165,14 @@ int main() {
       const std::vector<rl::platform::platform_event> events =
           window.poll_events([&imgui_layer](const SDL_Event& event) { imgui_layer.handle_event(event); });
       process_platform_events(events, input_state, event_dispatcher, input_actions, running);
+
+      const rl::vulkan::renderer_ui_render_target current_renderer_ui_target = renderer.ui_render_target();
+      imgui_layer.update_render_target(rl::ui::imgui_render_target{
+        .color_format = current_renderer_ui_target.color_format,
+        .min_image_count = current_renderer_ui_target.min_image_count,
+        .image_count = current_renderer_ui_target.image_count,
+        .generation = current_renderer_ui_target.generation,
+      });
 
       imgui_layer.begin_frame();
       imgui_layer.draw_renderer_status(renderer.status());
