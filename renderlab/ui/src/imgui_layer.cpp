@@ -37,6 +37,14 @@ void check_vk_result(VkResult result) {
 
 void text_unformatted(const std::string& text) { ImGui::TextUnformatted(text.c_str()); }
 
+void draw_frame_timing_status() {
+  const ImGuiIO& imgui_io = ImGui::GetIO();
+  const float fps = imgui_io.Framerate;
+  const float frame_time_ms = fps > 0.0f ? 1000.0f / fps : 0.0f;
+
+  text_unformatted(fmt::format("Frame time: {:.2f} ms ({:.1f} FPS)", frame_time_ms, fps));
+}
+
 void draw_render_path_control(rl::vulkan::renderer_settings& settings) {
   constexpr std::array render_paths{
     rl::vulkan::render_path::forward,
@@ -212,6 +220,7 @@ void imgui_layer::draw_renderer_panel(const rl::vulkan::renderer_status& status,
     draw_frame_count_control(renderer);
 
     ImGui::SeparatorText("Status");
+    draw_frame_timing_status();
     text_unformatted(fmt::format("Frame: {}", status.frame_index));
     text_unformatted(fmt::format("Frames in flight: {}", status.frames_in_flight));
     text_unformatted(fmt::format("Render path: {}", rl::vulkan::to_string(status.path)));
