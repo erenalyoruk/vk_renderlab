@@ -15,6 +15,14 @@ namespace {
 
 [[nodiscard]] ImGuiContext* imgui_context(void* context) noexcept { return static_cast<ImGuiContext*>(context); }
 
+void build_font_atlas() {
+  ImGuiIO& imgui_io = ImGui::GetIO();
+  unsigned char* pixels = nullptr;
+  int width = 0;
+  int height = 0;
+  imgui_io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+}
+
 }  // namespace
 
 imgui_layer::imgui_layer(rl::platform::sdl_window& window) : context_{create_imgui_context()} {
@@ -25,6 +33,7 @@ imgui_layer::imgui_layer(rl::platform::sdl_window& window) : context_{create_img
   imgui_io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
   ImGui_ImplSDL3_InitForVulkan(window.native_handle());
+  build_font_atlas();
 }
 
 imgui_layer::~imgui_layer() noexcept {
