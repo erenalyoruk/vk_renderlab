@@ -32,6 +32,7 @@ cc_library(
         "//renderlab/base",
         "//renderlab/platform",
         "@spdlog",
+        "@glm//:glm",
         "@vk_sdk//:vulkan",
         "@vulkan_memory_allocator//:vma",
     ],
