@@ -14,6 +14,9 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): required by Vulkan-Hpp default dynamic dispatcher.
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
 #include "base/log.hpp"
 #include "platform/sdl_window.hpp"
 #include "vk/device.hpp"
@@ -145,6 +148,8 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL vulkan_debug_callback(vk::DebugUtilsMessageSeve
 vulkan_context::vulkan_context(const platform::sdl_window& window, vulkan_context_config config)
     : config_{std::move(config)} {
   RL_VK_INFO("initializing Vulkan context with vk::raii");
+
+  VULKAN_HPP_DEFAULT_DISPATCHER.init();
 
   create_instance(window);
   create_surface(window);
@@ -319,6 +324,7 @@ void vulkan_context::create_instance([[maybe_unused]] const platform::sdl_window
   }
 
   instance_ = vk::raii::Instance{context_, create_info};
+  VULKAN_HPP_DEFAULT_DISPATCHER.init(*instance_);
 
   RL_VK_INFO("Vulkan instance created: validation={}, debug_utils={}", validation_enabled_, debug_utils_enabled_);
 
@@ -429,6 +435,7 @@ void vulkan_context::enumerate_and_select_physical_device() {
 
 void vulkan_context::create_logical_device() {
   device_.emplace(selected_physical_device_handle(), selected_physical_device(), config_.requirements);
+  VULKAN_HPP_DEFAULT_DISPATCHER.init(device().raw_handle());
 }
 
 void vulkan_context::create_memory_allocator() {
