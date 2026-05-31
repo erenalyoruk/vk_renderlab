@@ -1,3 +1,5 @@
+* text=auto eol=lf
+
 *.bazel text eol=lf
 BUILD.bazel text eol=lf
 MODULE.bazel text eol=lf
