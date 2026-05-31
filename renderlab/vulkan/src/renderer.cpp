@@ -60,6 +60,27 @@ constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/tr
   return vk::PresentModeKHR::eFifo;
 }
 
+[[nodiscard]] bool requires_unenabled_present_mode_extension(vk::PresentModeKHR present_mode) noexcept {
+  return present_mode == vk::PresentModeKHR::eFifoLatestReadyEXT;
+}
+
+[[nodiscard]] std::vector<vk::PresentModeKHR> filter_usable_present_modes(
+    const std::vector<vk::PresentModeKHR>& present_modes) {
+  std::vector<vk::PresentModeKHR> usable_present_modes;
+  usable_present_modes.reserve(present_modes.size());
+
+  for (const vk::PresentModeKHR present_mode : present_modes) {
+    if (requires_unenabled_present_mode_extension(present_mode)) {
+      RL_RENDER_DEBUG("ignoring present mode requiring an unenabled extension: {}", vk::to_string(present_mode));
+      continue;
+    }
+
+    usable_present_modes.push_back(present_mode);
+  }
+
+  return usable_present_modes;
+}
+
 [[nodiscard]] vk::Extent2D choose_swapchain_extent(const vk::SurfaceCapabilitiesKHR& capabilities,
                                                    platform::extent2d drawable_extent) {
   if (capabilities.currentExtent.width != std::numeric_limits<std::uint32_t>::max()) {
@@ -407,7 +428,7 @@ void renderer::recreate_swapchain() {
 
   const vk::SurfaceCapabilitiesKHR capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
   const std::vector<vk::SurfaceFormatKHR> formats = physical_device.getSurfaceFormatsKHR(surface);
-  supported_present_modes_ = physical_device.getSurfacePresentModesKHR(surface);
+  supported_present_modes_ = filter_usable_present_modes(physical_device.getSurfacePresentModesKHR(surface));
 
   if (formats.empty() || supported_present_modes_.empty()) {
     throw std::runtime_error{"swapchain support is incomplete"};
