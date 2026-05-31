@@ -88,6 +88,7 @@ class renderer final : public noncopyable {
   struct frame_resources {
     vk::raii::CommandBuffer command_buffer{nullptr};
     vk::raii::Semaphore image_available{nullptr};
+    gpu_buffer scene_uniform_buffer;
     std::uint64_t timeline_value = 0;
   };
 
@@ -99,11 +100,14 @@ class renderer final : public noncopyable {
 
   void create_command_pool();
   void create_frame_resources();
+  void create_debug_scene_resources();
+  void create_debug_scene_descriptor_sets();
   void recreate_swapchain();
   void release_swapchain() noexcept;
   void create_swapchain_image_views();
   void create_depth_resources();
   void create_debug_pipeline();
+  void update_debug_scene_uniforms(std::size_t frame_index);
   void build_frame_graph(std::size_t image_index);
   void record_frame_commands(frame_resources& frame, std::size_t image_index, const overlay_record_callback& overlay);
   void record_overlay_commands(const vk::raii::CommandBuffer& command_buffer, std::size_t image_index,
@@ -121,6 +125,11 @@ class renderer final : public noncopyable {
   vk::raii::CommandPool command_pool_{nullptr};
   std::vector<frame_resources> frames_;
   vk::raii::Semaphore frame_timeline_{nullptr};
+  gpu_buffer debug_vertex_buffer_;
+  gpu_buffer debug_index_buffer_;
+  vk::raii::DescriptorSetLayout debug_scene_descriptor_set_layout_{nullptr};
+  vk::raii::DescriptorPool debug_scene_descriptor_pool_{nullptr};
+  std::vector<vk::raii::DescriptorSet> debug_scene_descriptor_sets_;
 
   vk::raii::SwapchainKHR swapchain_{nullptr};
   std::vector<vk::Image> swapchain_images_;

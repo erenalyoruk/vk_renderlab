@@ -44,10 +44,11 @@ constexpr std::string_view fragment_entry_point = "fragmentMain";
   return create_info;
 }
 
-[[nodiscard]] vk::PipelineVertexInputStateCreateInfo make_empty_vertex_input_state() noexcept {
+[[nodiscard]] vk::PipelineVertexInputStateCreateInfo make_vertex_input_state(
+    const graphics_pipeline_description& description) noexcept {
   vk::PipelineVertexInputStateCreateInfo create_info{};
-  create_info.vertexBindingDescriptionCount = 0;
-  create_info.vertexAttributeDescriptionCount = 0;
+  create_info.setVertexBindingDescriptions(description.vertex_bindings);
+  create_info.setVertexAttributeDescriptions(description.vertex_attributes);
   return create_info;
 }
 
@@ -123,7 +124,8 @@ graphics_pipeline::graphics_pipeline(const vk::raii::Device& device, const graph
     throw std::runtime_error{"graphics pipeline requires a concrete color format"};
   }
 
-  const vk::PipelineLayoutCreateInfo layout_create_info{};
+  vk::PipelineLayoutCreateInfo layout_create_info{};
+  layout_create_info.setSetLayouts(description.descriptor_set_layouts);
   layout_ = vk::raii::PipelineLayout{device, layout_create_info};
 
   const std::array shader_stages = {
@@ -135,7 +137,7 @@ graphics_pipeline::graphics_pipeline(const vk::raii::Device& device, const graph
   rendering_info.setColorAttachmentFormats(color_format_);
   rendering_info.depthAttachmentFormat = description.depth_format;
 
-  const vk::PipelineVertexInputStateCreateInfo vertex_input_state = make_empty_vertex_input_state();
+  const vk::PipelineVertexInputStateCreateInfo vertex_input_state = make_vertex_input_state(description);
   const vk::PipelineInputAssemblyStateCreateInfo input_assembly_state = make_input_assembly_state();
   const vk::PipelineViewportStateCreateInfo viewport_state = make_viewport_state();
   const vk::PipelineRasterizationStateCreateInfo rasterization_state = make_rasterization_state();

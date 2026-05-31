@@ -30,6 +30,9 @@ class shader_module final {
 struct graphics_pipeline_description {
   std::reference_wrapper<const shader_module> vertex_shader;
   std::reference_wrapper<const shader_module> fragment_shader;
+  std::span<const vk::VertexInputBindingDescription> vertex_bindings;
+  std::span<const vk::VertexInputAttributeDescription> vertex_attributes;
+  std::span<const vk::DescriptorSetLayout> descriptor_set_layouts;
   vk::Format color_format = vk::Format::eUndefined;
   vk::Format depth_format = vk::Format::eUndefined;
 };

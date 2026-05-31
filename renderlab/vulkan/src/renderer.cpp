@@ -4,15 +4,22 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <functional>
 #include <limits>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string_view>
 #include <variant>
 #include <vector>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/scalar_constants.hpp>
+#include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
 
@@ -31,8 +38,33 @@ namespace {
 constexpr std::uint32_t min_frames_in_flight = 1;
 constexpr std::uint32_t max_frames_in_flight = 3;
 constexpr std::uint64_t bytes_per_mib = std::uint64_t{1024} * std::uint64_t{1024};
-constexpr std::string_view triangle_vertex_shader_path = "renderlab/shaders/triangle.vert.spv";
-constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/triangle.frag.spv";
+constexpr std::string_view debug_cube_vertex_shader_path = "renderlab/shaders/debug_cube.vert.spv";
+constexpr std::string_view debug_cube_fragment_shader_path = "renderlab/shaders/debug_cube.frag.spv";
+constexpr float vertical_fov_radians = glm::pi<float>() / 3.0f;
+
+struct debug_vertex {
+  glm::vec3 position;
+  glm::vec3 color;
+};
+
+struct scene_uniforms {
+  glm::mat4 mvp{1.0f};
+};
+
+constexpr std::array debug_cube_vertices{
+  debug_vertex{.position = {-1.0f, -1.0f, -1.0f}, .color = {1.0f, 0.1f, 0.1f}},
+  debug_vertex{.position = {1.0f, -1.0f, -1.0f}, .color = {0.1f, 1.0f, 0.1f}},
+  debug_vertex{.position = {1.0f, 1.0f, -1.0f}, .color = {0.1f, 0.3f, 1.0f}},
+  debug_vertex{.position = {-1.0f, 1.0f, -1.0f}, .color = {1.0f, 0.9f, 0.1f}},
+  debug_vertex{.position = {-1.0f, -1.0f, 1.0f}, .color = {1.0f, 0.1f, 0.9f}},
+  debug_vertex{.position = {1.0f, -1.0f, 1.0f}, .color = {0.1f, 0.9f, 1.0f}},
+  debug_vertex{.position = {1.0f, 1.0f, 1.0f}, .color = {0.9f, 0.9f, 0.9f}},
+  debug_vertex{.position = {-1.0f, 1.0f, 1.0f}, .color = {0.4f, 0.8f, 0.2f}},
+};
+
+constexpr std::array<std::uint16_t, 36> debug_cube_indices{
+  0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 5, 4, 7, 7, 6, 5, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7, 3, 4, 5, 1, 1, 0, 4,
+};
 
 [[nodiscard]] bool extent_has_area(platform::extent2d extent) noexcept { return extent.width > 0 && extent.height > 0; }
 
@@ -41,6 +73,49 @@ constexpr std::string_view triangle_fragment_shader_path = "renderlab/shaders/tr
 }
 
 [[nodiscard]] std::uint64_t bytes_to_mib(std::uint64_t bytes) noexcept { return bytes / bytes_per_mib; }
+
+template <typename Value>
+void write_mapped_value(gpu_buffer& buffer, const Value& value) {
+  const std::span<std::byte> mapped_bytes = buffer.mapped_bytes();
+  if (mapped_bytes.size_bytes() < sizeof(Value)) {
+    throw std::runtime_error{"mapped buffer is too small for value upload"};
+  }
+
+  std::memcpy(mapped_bytes.data(), &value, sizeof(Value));
+}
+
+template <typename Value, std::size_t Size>
+void write_mapped_array(gpu_buffer& buffer, const std::array<Value, Size>& values) {
+  const std::span<std::byte> mapped_bytes = buffer.mapped_bytes();
+  const std::span source_values{values};
+  const std::span source_bytes = std::as_bytes(source_values);
+  if (mapped_bytes.size_bytes() < source_bytes.size_bytes()) {
+    throw std::runtime_error{"mapped buffer is too small for array upload"};
+  }
+
+  std::memcpy(mapped_bytes.data(), source_bytes.data(), source_bytes.size_bytes());
+}
+
+[[nodiscard]] vk::VertexInputBindingDescription make_debug_vertex_binding() noexcept {
+  vk::VertexInputBindingDescription result{};
+  result.binding = 0;
+  result.stride = sizeof(debug_vertex);
+  result.inputRate = vk::VertexInputRate::eVertex;
+  return result;
+}
+
+[[nodiscard]] std::array<vk::VertexInputAttributeDescription, 2> make_debug_vertex_attributes() noexcept {
+  std::array<vk::VertexInputAttributeDescription, 2> result{};
+  result.at(0).location = 0;
+  result.at(0).binding = 0;
+  result.at(0).format = vk::Format::eR32G32B32Sfloat;
+  result.at(0).offset = offsetof(debug_vertex, position);
+  result.at(1).location = 1;
+  result.at(1).binding = 0;
+  result.at(1).format = vk::Format::eR32G32B32Sfloat;
+  result.at(1).offset = offsetof(debug_vertex, color);
+  return result;
+}
 
 [[nodiscard]] vk::SurfaceFormatKHR choose_surface_format(const std::vector<vk::SurfaceFormatKHR>& formats) {
   const auto preferred = std::ranges::find_if(formats, [](const vk::SurfaceFormatKHR& format) {
@@ -213,6 +288,7 @@ renderer::renderer(const vulkan_context& context, platform::extent2d drawable_ex
   settings_.max_frames_in_flight = clamp_frame_count(settings_.max_frames_in_flight);
   create_command_pool();
   create_frame_resources();
+  create_debug_scene_resources();
   recreate_swapchain();
 }
 
@@ -290,6 +366,7 @@ void renderer::set_max_frames_in_flight(std::uint32_t frames_in_flight) {
   next_timeline_value_ = 1;
   image_timeline_values_.assign(swapchain_images_.size(), 0);
   create_frame_resources();
+  create_debug_scene_descriptor_sets();
 }
 
 void renderer::apply_pending_settings() {
@@ -426,10 +503,83 @@ void renderer::create_frame_resources() {
     frames_.push_back(frame_resources{
       .command_buffer = std::move(command_buffer),
       .image_available = vk::raii::Semaphore{context_.device().handle(), semaphore_create_info},
+      .scene_uniform_buffer = context_.allocator().create_buffer(buffer_description{
+        .size = sizeof(scene_uniforms),
+        .usage = vk::BufferUsageFlagBits::eUniformBuffer,
+        .memory = memory_usage::cpu_to_gpu,
+        .mapped = true,
+      }),
     });
   }
 
   RL_RENDER_INFO("frame timeline semaphore ready: frames_in_flight={}", frames_.size());
+}
+
+void renderer::create_debug_scene_resources() {
+  debug_vertex_buffer_ = context_.allocator().create_buffer(buffer_description{
+    .size = sizeof(debug_vertex) * debug_cube_vertices.size(),
+    .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+    .memory = memory_usage::cpu_to_gpu,
+    .mapped = true,
+  });
+  debug_index_buffer_ = context_.allocator().create_buffer(buffer_description{
+    .size = sizeof(std::uint16_t) * debug_cube_indices.size(),
+    .usage = vk::BufferUsageFlagBits::eIndexBuffer,
+    .memory = memory_usage::cpu_to_gpu,
+    .mapped = true,
+  });
+  write_mapped_array(debug_vertex_buffer_, debug_cube_vertices);
+  write_mapped_array(debug_index_buffer_, debug_cube_indices);
+
+  vk::DescriptorSetLayoutBinding scene_uniform_binding{};
+  scene_uniform_binding.binding = 0;
+  scene_uniform_binding.descriptorType = vk::DescriptorType::eUniformBuffer;
+  scene_uniform_binding.descriptorCount = 1;
+  scene_uniform_binding.stageFlags = vk::ShaderStageFlagBits::eVertex;
+
+  vk::DescriptorSetLayoutCreateInfo layout_create_info{};
+  layout_create_info.setBindings(scene_uniform_binding);
+  debug_scene_descriptor_set_layout_ = vk::raii::DescriptorSetLayout{context_.device().handle(), layout_create_info};
+
+  create_debug_scene_descriptor_sets();
+}
+
+void renderer::create_debug_scene_descriptor_sets() {
+  debug_scene_descriptor_sets_.clear();
+  debug_scene_descriptor_pool_ = nullptr;
+
+  if (frames_.empty() || !*debug_scene_descriptor_set_layout_) {
+    return;
+  }
+
+  vk::DescriptorPoolSize pool_size{};
+  pool_size.type = vk::DescriptorType::eUniformBuffer;
+  pool_size.descriptorCount = static_cast<std::uint32_t>(frames_.size());
+
+  vk::DescriptorPoolCreateInfo pool_create_info{};
+  pool_create_info.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+  pool_create_info.maxSets = static_cast<std::uint32_t>(frames_.size());
+  pool_create_info.setPoolSizes(pool_size);
+  debug_scene_descriptor_pool_ = vk::raii::DescriptorPool{context_.device().handle(), pool_create_info};
+
+  const std::vector layouts(frames_.size(), *debug_scene_descriptor_set_layout_);
+  vk::DescriptorSetAllocateInfo allocate_info{};
+  allocate_info.descriptorPool = *debug_scene_descriptor_pool_;
+  allocate_info.setSetLayouts(layouts);
+  debug_scene_descriptor_sets_ = context_.device().handle().allocateDescriptorSets(allocate_info);
+
+  for (std::size_t frame_index = 0; frame_index < frames_.size(); ++frame_index) {
+    vk::DescriptorBufferInfo buffer_info{};
+    buffer_info.buffer = frames_.at(frame_index).scene_uniform_buffer.handle();
+    buffer_info.offset = 0;
+    buffer_info.range = sizeof(scene_uniforms);
+    vk::WriteDescriptorSet write{};
+    write.dstSet = *debug_scene_descriptor_sets_.at(frame_index);
+    write.dstBinding = 0;
+    write.descriptorType = vk::DescriptorType::eUniformBuffer;
+    write.setBufferInfo(buffer_info);
+    context_.device().handle().updateDescriptorSets(write, nullptr);
+  }
 }
 
 void renderer::recreate_swapchain() {
@@ -556,29 +706,64 @@ void renderer::create_depth_resources() {
 
 void renderer::create_debug_pipeline() {
   if (!debug_vertex_shader_.has_value()) {
-    debug_vertex_shader_.emplace(context_.device().handle(), load_shader_bytes(triangle_vertex_shader_path));
+    debug_vertex_shader_.emplace(context_.device().handle(), load_shader_bytes(debug_cube_vertex_shader_path));
   }
 
   if (!debug_fragment_shader_.has_value()) {
-    debug_fragment_shader_.emplace(context_.device().handle(), load_shader_bytes(triangle_fragment_shader_path));
+    debug_fragment_shader_.emplace(context_.device().handle(), load_shader_bytes(debug_cube_fragment_shader_path));
   }
+
+  const std::array vertex_bindings = {make_debug_vertex_binding()};
+  const std::array vertex_attributes = make_debug_vertex_attributes();
+  const std::array descriptor_set_layouts = {*debug_scene_descriptor_set_layout_};
 
   debug_triangle_pipeline_.emplace(context_.device().handle(), graphics_pipeline_description{
                                                                  .vertex_shader = std::cref(*debug_vertex_shader_),
                                                                  .fragment_shader = std::cref(*debug_fragment_shader_),
+                                                                 .vertex_bindings = vertex_bindings,
+                                                                 .vertex_attributes = vertex_attributes,
+                                                                 .descriptor_set_layouts = descriptor_set_layouts,
                                                                  .color_format = surface_format_.format,
                                                                  .depth_format = depth_format_,
                                                                });
 
-  RL_SHADER_INFO("debug triangle pipeline ready: color_format={}", vk::to_string(surface_format_.format));
+  RL_SHADER_INFO("debug cube pipeline ready: color_format={}", vk::to_string(surface_format_.format));
+}
+
+void renderer::update_debug_scene_uniforms(std::size_t frame_index) {
+  if (frame_index >= frames_.size() || swapchain_extent_.height == 0) {
+    return;
+  }
+
+  const float aspect =
+      static_cast<float>(swapchain_extent_.width) / static_cast<float>(std::max(swapchain_extent_.height, 1u));
+  const float rotation = static_cast<float>(frame_index_) * 0.015f;
+  glm::mat4 projection = glm::perspective(vertical_fov_radians, aspect, 0.1f, 100.0f);
+  const glm::mat4 vulkan_clip = glm::scale(glm::mat4{1.0f}, glm::vec3{1.0f, -1.0f, 1.0f});
+  projection = vulkan_clip * projection;
+
+  const glm::mat4 view =
+      glm::lookAt(glm::vec3{2.0f, 2.0f, 4.0f}, glm::vec3{0.0f, 0.0f, 0.0f}, glm::vec3{0.0f, 1.0f, 0.0f});
+  const glm::mat4 model = glm::rotate(glm::mat4{1.0f}, rotation, glm::vec3{0.0f, 1.0f, 0.0f});
+
+  write_mapped_value(frames_.at(frame_index).scene_uniform_buffer, scene_uniforms{
+                                                                     .mvp = projection * view * model,
+                                                                   });
 }
 
 void renderer::build_frame_graph(std::size_t image_index) {
   const optional_device_features& optional_features = context_.device().optional_features();
-  const std::optional<std::reference_wrapper<const graphics_pipeline>> debug_pipeline =
-      debug_triangle_pipeline_.has_value()
-          ? std::optional<std::reference_wrapper<const graphics_pipeline>>{std::cref(*debug_triangle_pipeline_)}
-          : std::nullopt;
+  const bool has_debug_draw = debug_triangle_pipeline_.has_value() && debug_vertex_buffer_ && debug_index_buffer_ &&
+                              current_frame_ < debug_scene_descriptor_sets_.size();
+  const std::optional<render_path_debug_draw> debug_draw =
+      has_debug_draw ? std::optional<render_path_debug_draw>{render_path_debug_draw{
+                         .pipeline = &*debug_triangle_pipeline_,
+                         .vertex_buffer = debug_vertex_buffer_.handle(),
+                         .index_buffer = debug_index_buffer_.handle(),
+                         .descriptor_set = *debug_scene_descriptor_sets_.at(current_frame_),
+                         .index_count = static_cast<std::uint32_t>(debug_cube_indices.size()),
+                       }}
+                     : std::nullopt;
   const std::optional<render_path_depth_target> depth_target =
       has_depth_target(image_index) ? std::optional<render_path_depth_target>{render_path_depth_target{
                                         .image = depth_images_.at(image_index).handle(),
@@ -605,7 +790,7 @@ void renderer::build_frame_graph(std::size_t image_index) {
                                                       .clear_color = vk::ClearColorValue{settings_.clear_color},
                                                     },
                                                 .depth = depth_target,
-                                                .debug_pipeline = debug_pipeline,
+                                                .debug_draw = debug_draw,
                                               });
 }
 
@@ -613,6 +798,7 @@ void renderer::record_frame_commands(frame_resources& frame, std::size_t image_i
                                      const overlay_record_callback& overlay) {
   const vk::raii::CommandBuffer& command_buffer = frame.command_buffer;
   command_buffer.reset();
+  update_debug_scene_uniforms(current_frame_);
 
   build_frame_graph(image_index);
 

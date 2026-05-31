@@ -122,14 +122,14 @@ void import_depth_target(frame_graph& graph, const std::optional<render_path_dep
 void add_swapchain_clear_pass(frame_graph& graph, const render_path_build_info& info) {
   const render_path_swapchain_target target = info.swapchain;
   const std::optional<render_path_depth_target> depth = info.depth;
-  const std::optional<std::reference_wrapper<const graphics_pipeline>> debug_pipeline = info.debug_pipeline;
+  const std::optional<render_path_debug_draw> debug_draw = info.debug_draw;
 
   graph.add_pass(frame_graph_pass{
     .name = std::string{clear_pass_name(info.path)},
     .queue = frame_graph_queue::graphics,
     .accesses = swapchain_pass_accesses(depth),
     .execute =
-        [target, depth, debug_pipeline](const frame_graph_context& graph_context) {
+        [target, depth, debug_draw](const frame_graph_context& graph_context) {
           const vk::raii::CommandBuffer& command_buffer = graph_context.command_buffer.get();
 
           const vk::ImageMemoryBarrier2 to_color_attachment = make_color_layout_barrier(
@@ -177,8 +177,8 @@ void add_swapchain_clear_pass(frame_graph& graph, const render_path_build_info& 
 
           command_buffer.beginRendering(rendering_info);
 
-          if (debug_pipeline.has_value()) {
-            const graphics_pipeline& pipeline = debug_pipeline->get();
+          if (debug_draw.has_value() && debug_draw->pipeline != nullptr) {
+            const graphics_pipeline& pipeline = *debug_draw->pipeline;
             const vk::Viewport viewport{
               0.0f, 0.0f, static_cast<float>(target.extent.width), static_cast<float>(target.extent.height), 0.0f, 1.0f,
             };
@@ -192,7 +192,13 @@ void add_swapchain_clear_pass(frame_graph& graph, const render_path_build_info& 
             command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle());
             command_buffer.setViewport(0, viewports);
             command_buffer.setScissor(0, scissors);
-            command_buffer.draw(3, 1, 0, 0);
+            const std::array vertex_buffers = {debug_draw->vertex_buffer};
+            const std::array vertex_offsets = {vk::DeviceSize{0}};
+            command_buffer.bindVertexBuffers(0, vertex_buffers, vertex_offsets);
+            command_buffer.bindIndexBuffer(debug_draw->index_buffer, 0, vk::IndexType::eUint16);
+            command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout(), 0,
+                                              debug_draw->descriptor_set, nullptr);
+            command_buffer.drawIndexed(debug_draw->index_count, 1, 0, 0, 0);
           }
 
           command_buffer.endRendering();
