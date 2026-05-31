@@ -62,13 +62,14 @@ class renderer final : public noncopyable {
   struct frame_resources {
     vk::raii::CommandBuffer command_buffer{nullptr};
     vk::raii::Semaphore image_available{nullptr};
-    vk::raii::Fence in_flight{nullptr};
+    std::uint64_t timeline_value = 0;
   };
 
   [[nodiscard]] bool has_drawable_extent() const noexcept;
   [[nodiscard]] bool has_depth_target(std::size_t image_index) const noexcept;
   [[nodiscard]] bool can_render() const noexcept;
   [[nodiscard]] std::uint32_t frame_count() const noexcept;
+  [[nodiscard]] bool wait_for_timeline_value(std::uint64_t value) const;
 
   void create_command_pool();
   void create_frame_resources();
@@ -87,13 +88,14 @@ class renderer final : public noncopyable {
 
   vk::raii::CommandPool command_pool_{nullptr};
   std::vector<frame_resources> frames_;
+  vk::raii::Semaphore frame_timeline_{nullptr};
 
   vk::raii::SwapchainKHR swapchain_{nullptr};
   std::vector<vk::Image> swapchain_images_;
   std::vector<vk::raii::ImageView> swapchain_image_views_;
   std::vector<vk::ImageLayout> image_layouts_;
   std::vector<vk::raii::Semaphore> render_finished_;
-  std::vector<vk::Fence> image_in_flight_fences_;
+  std::vector<std::uint64_t> image_timeline_values_;
   std::vector<gpu_image> depth_images_;
   std::vector<vk::raii::ImageView> depth_image_views_;
   std::vector<vk::ImageLayout> depth_layouts_;
@@ -110,6 +112,7 @@ class renderer final : public noncopyable {
 
   std::size_t current_frame_ = 0;
   std::uint64_t frame_index_ = 0;
+  std::uint64_t next_timeline_value_ = 1;
   bool suspended_ = false;
 };
 

@@ -259,6 +259,23 @@ bool renderer::can_render() const noexcept {
 
 std::uint32_t renderer::frame_count() const noexcept { return clamp_frame_count(settings_.max_frames_in_flight); }
 
+bool renderer::wait_for_timeline_value(std::uint64_t value) const {
+  if (value == 0) {
+    return true;
+  }
+
+  const std::array semaphores = {*frame_timeline_};
+  const std::array values = {value};
+
+  vk::SemaphoreWaitInfo wait_info{};
+  wait_info.setSemaphores(semaphores);
+  wait_info.setValues(values);
+
+  const vk::Result result =
+      context_.device().handle().waitSemaphores(wait_info, std::numeric_limits<std::uint64_t>::max());
+  return result == vk::Result::eSuccess;
+}
+
 void renderer::create_command_pool() {
   const auto graphics_queue = context_.device().queues().graphics;
   if (!graphics_queue.has_value()) {
@@ -273,6 +290,14 @@ void renderer::create_command_pool() {
 }
 
 void renderer::create_frame_resources() {
+  vk::SemaphoreTypeCreateInfo timeline_type{};
+  timeline_type.semaphoreType = vk::SemaphoreType::eTimeline;
+  timeline_type.initialValue = 0;
+
+  vk::SemaphoreCreateInfo timeline_create_info{};
+  timeline_create_info.pNext = &timeline_type;
+  frame_timeline_ = vk::raii::Semaphore{context_.device().handle(), timeline_create_info};
+
   vk::CommandBufferAllocateInfo allocate_info{};
   allocate_info.commandPool = *command_pool_;
   allocate_info.level = vk::CommandBufferLevel::ePrimary;
@@ -282,8 +307,6 @@ void renderer::create_frame_resources() {
       context_.device().handle().allocateCommandBuffers(allocate_info);
 
   const vk::SemaphoreCreateInfo semaphore_create_info{};
-  vk::FenceCreateInfo fence_create_info{};
-  fence_create_info.flags = vk::FenceCreateFlagBits::eSignaled;
 
   frames_.clear();
   frames_.reserve(command_buffers.size());
@@ -292,9 +315,10 @@ void renderer::create_frame_resources() {
     frames_.push_back(frame_resources{
       .command_buffer = std::move(command_buffer),
       .image_available = vk::raii::Semaphore{context_.device().handle(), semaphore_create_info},
-      .in_flight = vk::raii::Fence{context_.device().handle(), fence_create_info},
     });
   }
+
+  RL_RENDER_INFO("frame timeline semaphore ready: frames_in_flight={}", frames_.size());
 }
 
 void renderer::recreate_swapchain() {
@@ -348,7 +372,7 @@ void renderer::recreate_swapchain() {
   swapchain_ = vk::raii::SwapchainKHR{context_.device().handle(), create_info};
   swapchain_images_ = swapchain_.getImages();
   image_layouts_.assign(swapchain_images_.size(), vk::ImageLayout::eUndefined);
-  image_in_flight_fences_.assign(swapchain_images_.size(), nullptr);
+  image_timeline_values_.assign(swapchain_images_.size(), 0);
 
   create_swapchain_image_views();
   create_depth_resources();
@@ -372,7 +396,7 @@ void renderer::release_swapchain() noexcept {
   depth_format_ = vk::Format::eUndefined;
   render_finished_.clear();
   swapchain_image_views_.clear();
-  image_in_flight_fences_.clear();
+  image_timeline_values_.clear();
   image_layouts_.clear();
   swapchain_images_.clear();
   swapchain_ = nullptr;
@@ -489,11 +513,7 @@ void renderer::record_frame_commands(frame_resources& frame, std::size_t image_i
 
 void renderer::draw_frame_impl() {
   frame_resources& frame = frames_.at(current_frame_);
-  const std::array frame_fences = {*frame.in_flight};
-
-  const vk::Result wait_result =
-      context_.device().handle().waitForFences(frame_fences, vk::True, std::numeric_limits<std::uint64_t>::max());
-  if (wait_result != vk::Result::eSuccess) {
+  if (!wait_for_timeline_value(frame.timeline_value)) {
     return;
   }
 
@@ -501,39 +521,53 @@ void renderer::draw_frame_impl() {
       swapchain_.acquireNextImage(std::numeric_limits<std::uint64_t>::max(), *frame.image_available);
   const std::size_t image_index = acquired_image.second;
 
-  const vk::Fence image_fence = image_in_flight_fences_.at(image_index);
-  if (image_fence) {
-    const std::array image_fences = {image_fence};
-    const vk::Result image_fence_wait_result =
-        context_.device().handle().waitForFences(image_fences, vk::True, std::numeric_limits<std::uint64_t>::max());
-    if (image_fence_wait_result != vk::Result::eSuccess) {
-      return;
-    }
+  if (!wait_for_timeline_value(image_timeline_values_.at(image_index))) {
+    return;
   }
 
-  image_in_flight_fences_.at(image_index) = *frame.in_flight;
-
-  context_.device().handle().resetFences(frame_fences);
   record_frame_commands(frame, image_index);
 
-  const std::array wait_semaphores = {*frame.image_available};
-  const std::array wait_stages = {vk::PipelineStageFlags{vk::PipelineStageFlagBits::eColorAttachmentOutput}};
-  const std::array command_buffers = {*frame.command_buffer};
-  const std::array signal_semaphores = {*render_finished_.at(image_index)};
+  const std::uint64_t signal_timeline_value = next_timeline_value_++;
+  const std::array wait_semaphores = {
+    vk::SemaphoreSubmitInfo{
+      *frame.image_available,
+      0,
+      vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+    },
+  };
+  const std::array command_buffers = {
+    vk::CommandBufferSubmitInfo{
+      *frame.command_buffer,
+    },
+  };
+  const std::array signal_semaphores = {
+    vk::SemaphoreSubmitInfo{
+      *render_finished_.at(image_index),
+      0,
+      vk::PipelineStageFlagBits2::eAllCommands,
+    },
+    vk::SemaphoreSubmitInfo{
+      *frame_timeline_,
+      signal_timeline_value,
+      vk::PipelineStageFlagBits2::eAllCommands,
+    },
+  };
 
-  vk::SubmitInfo submit_info{};
-  submit_info.setWaitSemaphores(wait_semaphores);
-  submit_info.setWaitDstStageMask(wait_stages);
-  submit_info.setCommandBuffers(command_buffers);
-  submit_info.setSignalSemaphores(signal_semaphores);
+  vk::SubmitInfo2 submit_info{};
+  submit_info.setWaitSemaphoreInfos(wait_semaphores);
+  submit_info.setCommandBufferInfos(command_buffers);
+  submit_info.setSignalSemaphoreInfos(signal_semaphores);
 
-  context_.device().graphics_queue().submit(submit_info, *frame.in_flight);
+  context_.device().graphics_queue().submit2(submit_info);
+  frame.timeline_value = signal_timeline_value;
+  image_timeline_values_.at(image_index) = signal_timeline_value;
 
   const std::array swapchains = {*swapchain_};
   const std::array image_indices = {acquired_image.second};
+  const std::array present_wait_semaphores = {*render_finished_.at(image_index)};
 
   vk::PresentInfoKHR present_info{};
-  present_info.setWaitSemaphores(signal_semaphores);
+  present_info.setWaitSemaphores(present_wait_semaphores);
   present_info.setSwapchains(swapchains);
   present_info.setImageIndices(image_indices);
 
