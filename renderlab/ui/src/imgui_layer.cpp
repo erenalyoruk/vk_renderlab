@@ -225,9 +225,11 @@ void imgui_layer::draw_renderer_panel(const rl::vulkan::renderer_status& status,
     text_unformatted(fmt::format("Frames in flight: {}", status.frames_in_flight));
     text_unformatted(fmt::format("Render path: {}", rl::vulkan::to_string(status.path)));
     text_unformatted(fmt::format("Present mode: {}", vk::to_string(status.present_mode)));
+    text_unformatted(fmt::format("Drawable: {}x{}", status.drawable_extent.width, status.drawable_extent.height));
     text_unformatted(fmt::format("Swapchain: {}x{}, images={}", status.swapchain_extent.width,
                                  status.swapchain_extent.height, status.swapchain_image_count));
     text_unformatted(fmt::format("Swapchain generation: {}", status.swapchain_generation));
+    text_unformatted(fmt::format("Swapchain ready: {}", status.swapchain_ready ? "yes" : "no"));
     text_unformatted(fmt::format("Frame graph passes: {}", status.frame_graph_pass_count));
     text_unformatted(fmt::format("Suspended: {}", status.suspended ? "yes" : "no"));
   }
