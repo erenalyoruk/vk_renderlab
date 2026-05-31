@@ -75,6 +75,7 @@ class renderer final : public noncopyable {
   [[nodiscard]] const renderer_settings& settings() const noexcept;
   [[nodiscard]] renderer_status status() const noexcept;
   [[nodiscard]] renderer_ui_render_target ui_render_target() const noexcept;
+  [[nodiscard]] const std::vector<vk::PresentModeKHR>& supported_present_modes() const noexcept;
   [[nodiscard]] bool suspended() const noexcept;
 
  private:
@@ -129,6 +130,7 @@ class renderer final : public noncopyable {
   std::uint32_t swapchain_min_image_count_ = 2;
   vk::Format depth_format_ = vk::Format::eUndefined;
   vk::PresentModeKHR present_mode_ = vk::PresentModeKHR::eFifo;
+  std::vector<vk::PresentModeKHR> supported_present_modes_;
   vk::Extent2D swapchain_extent_{};
   std::uint64_t swapchain_generation_ = 0;
   frame_graph frame_graph_;

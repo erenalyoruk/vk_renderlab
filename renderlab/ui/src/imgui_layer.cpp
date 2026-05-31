@@ -4,6 +4,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
@@ -74,17 +75,15 @@ void draw_renderer_settings(rl::vulkan::renderer_settings& settings) {
 }
 
 void draw_present_mode_control(rl::vulkan::renderer& renderer) {
-  constexpr std::array present_modes{
-    vk::PresentModeKHR::eFifo,
-    vk::PresentModeKHR::eMailbox,
-    vk::PresentModeKHR::eImmediate,
-    vk::PresentModeKHR::eFifoRelaxed,
-  };
-
   const rl::vulkan::renderer_settings& settings = renderer.settings();
   const std::string current_present_mode = vk::to_string(settings.preferred_present_mode);
   if (!ImGui::BeginCombo("Preferred present mode", current_present_mode.c_str())) {
     return;
+  }
+
+  std::vector<vk::PresentModeKHR> present_modes = renderer.supported_present_modes();
+  if (present_modes.empty()) {
+    present_modes.push_back(vk::PresentModeKHR::eFifo);
   }
 
   for (const vk::PresentModeKHR present_mode : present_modes) {

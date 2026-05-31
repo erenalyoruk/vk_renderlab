@@ -311,6 +311,10 @@ renderer_ui_render_target renderer::ui_render_target() const noexcept {
   };
 }
 
+const std::vector<vk::PresentModeKHR>& renderer::supported_present_modes() const noexcept {
+  return supported_present_modes_;
+}
+
 bool renderer::suspended() const noexcept { return suspended_; }
 
 bool renderer::has_drawable_extent() const noexcept { return extent_has_area(drawable_extent_); }
@@ -403,14 +407,14 @@ void renderer::recreate_swapchain() {
 
   const vk::SurfaceCapabilitiesKHR capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
   const std::vector<vk::SurfaceFormatKHR> formats = physical_device.getSurfaceFormatsKHR(surface);
-  const std::vector<vk::PresentModeKHR> present_modes = physical_device.getSurfacePresentModesKHR(surface);
+  supported_present_modes_ = physical_device.getSurfacePresentModesKHR(surface);
 
-  if (formats.empty() || present_modes.empty()) {
+  if (formats.empty() || supported_present_modes_.empty()) {
     throw std::runtime_error{"swapchain support is incomplete"};
   }
 
   surface_format_ = choose_surface_format(formats);
-  present_mode_ = choose_present_mode(present_modes, settings_.preferred_present_mode);
+  present_mode_ = choose_present_mode(supported_present_modes_, settings_.preferred_present_mode);
   swapchain_extent_ = choose_swapchain_extent(capabilities, drawable_extent_);
   swapchain_min_image_count_ = std::max(2u, capabilities.minImageCount);
 
