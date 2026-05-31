@@ -38,6 +38,7 @@ struct renderer_status {
   std::uint32_t frame_graph_pass_count = 0;
   std::uint32_t frames_in_flight = 0;
   render_path path = render_path::forward_plus;
+  vk::PresentModeKHR preferred_present_mode = vk::PresentModeKHR::eMailbox;
   vk::PresentModeKHR present_mode = vk::PresentModeKHR::eFifo;
   bool suspended = false;
   bool swapchain_ready = false;

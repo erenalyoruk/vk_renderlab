@@ -45,6 +45,16 @@ void draw_frame_timing_status() {
   text_unformatted(fmt::format("Frame time: {:.2f} ms ({:.1f} FPS)", frame_time_ms, fps));
 }
 
+void draw_present_mode_status(const rl::vulkan::renderer_status& status) {
+  if (status.present_mode == status.preferred_present_mode) {
+    text_unformatted(fmt::format("Present mode: {}", vk::to_string(status.present_mode)));
+    return;
+  }
+
+  text_unformatted(fmt::format("Present mode: {} (preferred: {})", vk::to_string(status.present_mode),
+                               vk::to_string(status.preferred_present_mode)));
+}
+
 void draw_render_path_control(rl::vulkan::renderer_settings& settings) {
   constexpr std::array render_paths{
     rl::vulkan::render_path::forward,
@@ -224,7 +234,7 @@ void imgui_layer::draw_renderer_panel(const rl::vulkan::renderer_status& status,
     text_unformatted(fmt::format("Frame: {}", status.frame_index));
     text_unformatted(fmt::format("Frames in flight: {}", status.frames_in_flight));
     text_unformatted(fmt::format("Render path: {}", rl::vulkan::to_string(status.path)));
-    text_unformatted(fmt::format("Present mode: {}", vk::to_string(status.present_mode)));
+    draw_present_mode_status(status);
     text_unformatted(fmt::format("Drawable: {}x{}", status.drawable_extent.width, status.drawable_extent.height));
     text_unformatted(fmt::format("Swapchain: {}x{}, images={}", status.swapchain_extent.width,
                                  status.swapchain_extent.height, status.swapchain_image_count));

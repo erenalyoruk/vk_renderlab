@@ -318,6 +318,7 @@ renderer_status renderer::status() const noexcept {
     .frame_graph_pass_count = static_cast<std::uint32_t>(frame_graph_.passes().size()),
     .frames_in_flight = static_cast<std::uint32_t>(frames_.size()),
     .path = settings_.path,
+    .preferred_present_mode = settings_.preferred_present_mode,
     .present_mode = present_mode_,
     .suspended = suspended_,
     .swapchain_ready = static_cast<bool>(*swapchain_) && has_drawable_extent(),
