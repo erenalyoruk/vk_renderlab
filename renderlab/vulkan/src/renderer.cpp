@@ -52,6 +52,15 @@ struct scene_uniforms {
   glm::mat4 mvp{1.0f};
 };
 
+struct camera_parameters {
+  glm::vec3 position;
+  glm::vec3 target;
+  glm::vec3 up;
+  float vertical_fov = vertical_fov_radians;
+  float near_plane = 0.1f;
+  float far_plane = 100.0f;
+};
+
 constexpr std::array debug_cube_vertices{
   debug_vertex{.position = {-1.0f, -1.0f, -1.0f}, .color = {1.0f, 0.1f, 0.1f}},
   debug_vertex{.position = {1.0f, -1.0f, -1.0f}, .color = {0.1f, 1.0f, 0.1f}},
@@ -74,6 +83,36 @@ constexpr std::array<std::uint16_t, 36> debug_cube_indices{
 }
 
 [[nodiscard]] std::uint64_t bytes_to_mib(std::uint64_t bytes) noexcept { return bytes / bytes_per_mib; }
+
+[[nodiscard]] camera_parameters make_debug_camera() noexcept {
+  return camera_parameters{
+    .position = {2.0f, 2.0f, 4.0f},
+    .target = {0.0f, 0.0f, 0.0f},
+    .up = {0.0f, 1.0f, 0.0f},
+  };
+}
+
+[[nodiscard]] float aspect_ratio(vk::Extent2D extent) noexcept {
+  return static_cast<float>(extent.width) / static_cast<float>(std::max(extent.height, 1u));
+}
+
+[[nodiscard]] glm::mat4 make_vulkan_projection(const camera_parameters& camera, vk::Extent2D extent) {
+  const glm::mat4 projection =
+      glm::perspective(camera.vertical_fov, aspect_ratio(extent), camera.near_plane, camera.far_plane);
+  const glm::mat4 vulkan_clip = glm::scale(glm::mat4{1.0f}, glm::vec3{1.0f, -1.0f, 1.0f});
+  return vulkan_clip * projection;
+}
+
+[[nodiscard]] glm::mat4 make_view_projection(const camera_parameters& camera, vk::Extent2D extent) {
+  const glm::mat4 projection = make_vulkan_projection(camera, extent);
+  const glm::mat4 view = glm::lookAt(camera.position, camera.target, camera.up);
+  return projection * view;
+}
+
+[[nodiscard]] glm::mat4 make_debug_cube_model(std::uint64_t frame_index) {
+  const float rotation = static_cast<float>(frame_index) * 0.015f;
+  return glm::rotate(glm::mat4{1.0f}, rotation, glm::vec3{0.0f, 1.0f, 0.0f});
+}
 
 template <typename Value>
 void write_mapped_value(gpu_buffer& buffer, const Value& value) {
@@ -726,19 +765,12 @@ void renderer::update_debug_scene_uniforms(std::size_t frame_index) {
     return;
   }
 
-  const float aspect =
-      static_cast<float>(swapchain_extent_.width) / static_cast<float>(std::max(swapchain_extent_.height, 1u));
-  const float rotation = static_cast<float>(frame_index_) * 0.015f;
-  glm::mat4 projection = glm::perspective(vertical_fov_radians, aspect, 0.1f, 100.0f);
-  const glm::mat4 vulkan_clip = glm::scale(glm::mat4{1.0f}, glm::vec3{1.0f, -1.0f, 1.0f});
-  projection = vulkan_clip * projection;
-
-  const glm::mat4 view =
-      glm::lookAt(glm::vec3{2.0f, 2.0f, 4.0f}, glm::vec3{0.0f, 0.0f, 0.0f}, glm::vec3{0.0f, 1.0f, 0.0f});
-  const glm::mat4 model = glm::rotate(glm::mat4{1.0f}, rotation, glm::vec3{0.0f, 1.0f, 0.0f});
+  const camera_parameters camera = make_debug_camera();
+  const glm::mat4 view_projection = make_view_projection(camera, swapchain_extent_);
+  const glm::mat4 model = make_debug_cube_model(frame_index_);
 
   write_mapped_value(frames_.at(frame_index).scene_uniform_buffer, scene_uniforms{
-                                                                     .mvp = projection * view * model,
+                                                                     .mvp = view_projection * model,
                                                                    });
 }
 
