@@ -93,10 +93,17 @@ class renderer final : public noncopyable {
     std::uint64_t timeline_value = 0;
   };
 
+  struct mesh_resource {
+    gpu_buffer vertex_buffer;
+    gpu_buffer index_buffer;
+    std::uint32_t index_count = 0;
+  };
+
   [[nodiscard]] bool has_drawable_extent() const noexcept;
   [[nodiscard]] bool has_depth_target(std::size_t image_index) const noexcept;
   [[nodiscard]] bool can_render() const noexcept;
   [[nodiscard]] std::uint32_t frame_count() const noexcept;
+  [[nodiscard]] bool has_debug_cube_mesh() const noexcept;
   [[nodiscard]] bool wait_for_timeline_value(std::uint64_t value) const;
 
   void create_command_pool();
@@ -127,8 +134,7 @@ class renderer final : public noncopyable {
   std::optional<upload_context> upload_context_;
   std::vector<frame_resources> frames_;
   vk::raii::Semaphore frame_timeline_{nullptr};
-  gpu_buffer debug_vertex_buffer_;
-  gpu_buffer debug_index_buffer_;
+  mesh_resource debug_cube_mesh_;
   vk::raii::DescriptorSetLayout debug_scene_descriptor_set_layout_{nullptr};
   vk::raii::DescriptorPool debug_scene_descriptor_pool_{nullptr};
   std::vector<vk::raii::DescriptorSet> debug_scene_descriptor_sets_;

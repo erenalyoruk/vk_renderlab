@@ -438,6 +438,10 @@ bool renderer::can_render() const noexcept {
 
 std::uint32_t renderer::frame_count() const noexcept { return clamp_frame_count(settings_.max_frames_in_flight); }
 
+bool renderer::has_debug_cube_mesh() const noexcept {
+  return debug_cube_mesh_.vertex_buffer && debug_cube_mesh_.index_buffer && debug_cube_mesh_.index_count > 0;
+}
+
 bool renderer::wait_for_timeline_value(std::uint64_t value) const {
   if (value == 0) {
     return true;
@@ -514,8 +518,9 @@ void renderer::create_debug_scene_resources() {
   }
 
   const upload_context& uploader = upload_context_.value();
-  debug_vertex_buffer_ = uploader.create_device_buffer(vertex_bytes, vk::BufferUsageFlagBits::eVertexBuffer);
-  debug_index_buffer_ = uploader.create_device_buffer(index_bytes, vk::BufferUsageFlagBits::eIndexBuffer);
+  debug_cube_mesh_.vertex_buffer = uploader.create_device_buffer(vertex_bytes, vk::BufferUsageFlagBits::eVertexBuffer);
+  debug_cube_mesh_.index_buffer = uploader.create_device_buffer(index_bytes, vk::BufferUsageFlagBits::eIndexBuffer);
+  debug_cube_mesh_.index_count = static_cast<std::uint32_t>(debug_cube_indices.size());
 
   vk::DescriptorSetLayoutBinding scene_uniform_binding{};
   scene_uniform_binding.binding = 0;
@@ -739,15 +744,15 @@ void renderer::update_debug_scene_uniforms(std::size_t frame_index) {
 
 void renderer::build_frame_graph(std::size_t image_index) {
   const optional_device_features& optional_features = context_.device().optional_features();
-  const bool has_debug_draw = debug_cube_pipeline_.has_value() && debug_vertex_buffer_ && debug_index_buffer_ &&
-                              current_frame_ < debug_scene_descriptor_sets_.size();
+  const bool has_debug_draw =
+      debug_cube_pipeline_.has_value() && has_debug_cube_mesh() && current_frame_ < debug_scene_descriptor_sets_.size();
   const std::optional<render_path_debug_draw> debug_draw =
       has_debug_draw ? std::optional<render_path_debug_draw>{render_path_debug_draw{
                          .pipeline = &*debug_cube_pipeline_,
-                         .vertex_buffer = debug_vertex_buffer_.handle(),
-                         .index_buffer = debug_index_buffer_.handle(),
+                         .vertex_buffer = debug_cube_mesh_.vertex_buffer.handle(),
+                         .index_buffer = debug_cube_mesh_.index_buffer.handle(),
                          .descriptor_set = *debug_scene_descriptor_sets_.at(current_frame_),
-                         .index_count = static_cast<std::uint32_t>(debug_cube_indices.size()),
+                         .index_count = debug_cube_mesh_.index_count,
                        }}
                      : std::nullopt;
   const std::optional<render_path_depth_target> depth_target =
