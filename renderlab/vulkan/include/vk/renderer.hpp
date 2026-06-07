@@ -17,6 +17,7 @@
 #include "vk/memory_allocator.hpp"
 #include "vk/pipeline.hpp"
 #include "vk/render_path.hpp"
+#include "vk/upload_context.hpp"
 
 namespace rl::vulkan {
 
@@ -102,7 +103,6 @@ class renderer final : public noncopyable {
   void create_frame_resources();
   void create_debug_scene_resources();
   void create_debug_scene_descriptor_sets();
-  void copy_buffer(vk::Buffer source, vk::Buffer destination, vk::DeviceSize size);
   void recreate_swapchain();
   void release_swapchain() noexcept;
   void create_swapchain_image_views();
@@ -124,6 +124,7 @@ class renderer final : public noncopyable {
   std::uint64_t gpu_local_memory_mib_ = 0;
 
   vk::raii::CommandPool command_pool_{nullptr};
+  std::optional<upload_context> upload_context_;
   std::vector<frame_resources> frames_;
   vk::raii::Semaphore frame_timeline_{nullptr};
   gpu_buffer debug_vertex_buffer_;

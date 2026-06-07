@@ -30,6 +30,7 @@
 #include "vk/memory_allocator.hpp"
 #include "vk/pipeline.hpp"
 #include "vk/render_path.hpp"
+#include "vk/upload_context.hpp"
 #include "vk/vulkan_context.hpp"
 
 namespace rl::vulkan {
@@ -82,19 +83,6 @@ void write_mapped_value(gpu_buffer& buffer, const Value& value) {
   }
 
   std::memcpy(mapped_bytes.data(), &value, sizeof(Value));
-  buffer.flush();
-}
-
-template <typename Value, std::size_t Size>
-void write_mapped_array(gpu_buffer& buffer, const std::array<Value, Size>& values) {
-  const std::span<std::byte> mapped_bytes = buffer.mapped_bytes();
-  const std::span source_values{values};
-  const std::span source_bytes = std::as_bytes(source_values);
-  if (mapped_bytes.size_bytes() < source_bytes.size_bytes()) {
-    throw std::runtime_error{"mapped buffer is too small for array upload"};
-  }
-
-  std::memcpy(mapped_bytes.data(), source_bytes.data(), source_bytes.size_bytes());
   buffer.flush();
 }
 
@@ -289,6 +277,7 @@ renderer::renderer(const vulkan_context& context, platform::extent2d drawable_ex
       drawable_extent_{drawable_extent} {
   settings_.max_frames_in_flight = clamp_frame_count(settings_.max_frames_in_flight);
   create_command_pool();
+  upload_context_.emplace(context_);
   create_frame_resources();
   create_debug_scene_resources();
   recreate_swapchain();
@@ -518,34 +507,15 @@ void renderer::create_frame_resources() {
 }
 
 void renderer::create_debug_scene_resources() {
-  gpu_buffer vertex_staging_buffer = context_.allocator().create_buffer(buffer_description{
-    .size = sizeof(debug_vertex) * debug_cube_vertices.size(),
-    .usage = vk::BufferUsageFlagBits::eTransferSrc,
-    .memory = memory_usage::cpu_to_gpu,
-    .mapped = true,
-  });
-  gpu_buffer index_staging_buffer = context_.allocator().create_buffer(buffer_description{
-    .size = sizeof(std::uint16_t) * debug_cube_indices.size(),
-    .usage = vk::BufferUsageFlagBits::eTransferSrc,
-    .memory = memory_usage::cpu_to_gpu,
-    .mapped = true,
-  });
+  const std::span vertex_bytes = std::as_bytes(std::span{debug_cube_vertices});
+  const std::span index_bytes = std::as_bytes(std::span{debug_cube_indices});
+  if (!upload_context_.has_value()) {
+    throw std::runtime_error{"renderer upload context is not initialized"};
+  }
 
-  debug_vertex_buffer_ = context_.allocator().create_buffer(buffer_description{
-    .size = vertex_staging_buffer.size(),
-    .usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-    .memory = memory_usage::gpu_only,
-  });
-  debug_index_buffer_ = context_.allocator().create_buffer(buffer_description{
-    .size = index_staging_buffer.size(),
-    .usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-    .memory = memory_usage::gpu_only,
-  });
-
-  write_mapped_array(vertex_staging_buffer, debug_cube_vertices);
-  write_mapped_array(index_staging_buffer, debug_cube_indices);
-  copy_buffer(vertex_staging_buffer.handle(), debug_vertex_buffer_.handle(), vertex_staging_buffer.size());
-  copy_buffer(index_staging_buffer.handle(), debug_index_buffer_.handle(), index_staging_buffer.size());
+  const upload_context& uploader = upload_context_.value();
+  debug_vertex_buffer_ = uploader.create_device_buffer(vertex_bytes, vk::BufferUsageFlagBits::eVertexBuffer);
+  debug_index_buffer_ = uploader.create_device_buffer(index_bytes, vk::BufferUsageFlagBits::eIndexBuffer);
 
   vk::DescriptorSetLayoutBinding scene_uniform_binding{};
   scene_uniform_binding.binding = 0;
@@ -558,35 +528,6 @@ void renderer::create_debug_scene_resources() {
   debug_scene_descriptor_set_layout_ = vk::raii::DescriptorSetLayout{context_.device().handle(), layout_create_info};
 
   create_debug_scene_descriptor_sets();
-}
-
-void renderer::copy_buffer(vk::Buffer source, vk::Buffer destination, vk::DeviceSize size) {
-  vk::CommandBufferAllocateInfo allocate_info{};
-  allocate_info.commandPool = *command_pool_;
-  allocate_info.level = vk::CommandBufferLevel::ePrimary;
-  allocate_info.commandBufferCount = 1;
-
-  std::vector<vk::raii::CommandBuffer> command_buffers =
-      context_.device().handle().allocateCommandBuffers(allocate_info);
-  const vk::raii::CommandBuffer& command_buffer = command_buffers.at(0);
-
-  vk::CommandBufferBeginInfo begin_info{};
-  begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-  command_buffer.begin(begin_info);
-  vk::BufferCopy copy_region{};
-  copy_region.srcOffset = 0;
-  copy_region.dstOffset = 0;
-  copy_region.size = size;
-  command_buffer.copyBuffer(source, destination, copy_region);
-  command_buffer.end();
-
-  vk::CommandBufferSubmitInfo command_buffer_info{};
-  command_buffer_info.commandBuffer = *command_buffer;
-  vk::SubmitInfo2 submit_info{};
-  submit_info.setCommandBufferInfos(command_buffer_info);
-
-  context_.device().graphics_queue().submit2(submit_info);
-  context_.device().graphics_queue().waitIdle();
 }
 
 void renderer::create_debug_scene_descriptor_sets() {
