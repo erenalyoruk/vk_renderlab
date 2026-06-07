@@ -102,6 +102,7 @@ class renderer final : public noncopyable {
   void create_frame_resources();
   void create_debug_scene_resources();
   void create_debug_scene_descriptor_sets();
+  void copy_buffer(vk::Buffer source, vk::Buffer destination, vk::DeviceSize size);
   void recreate_swapchain();
   void release_swapchain() noexcept;
   void create_swapchain_image_views();

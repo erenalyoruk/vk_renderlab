@@ -140,6 +140,16 @@ std::span<std::byte> gpu_buffer::mapped_bytes() noexcept { return mapped_bytes_;
 
 std::span<const std::byte> gpu_buffer::mapped_bytes() const noexcept { return mapped_bytes_; }
 
+void gpu_buffer::flush() const {
+  if (allocation_ == nullptr || mapped_bytes_.empty()) {
+    return;
+  }
+
+  const VkResult result = vmaFlushAllocation(static_cast<VmaAllocator>(allocation_.get_deleter().allocator),
+                                             static_cast<VmaAllocation>(allocation_.get()), 0, VK_WHOLE_SIZE);
+  check_vma_result(result, "vmaFlushAllocation");
+}
+
 gpu_buffer::operator bool() const noexcept { return static_cast<bool>(buffer_); }
 
 void gpu_buffer::allocation_deleter::operator()(void* allocation) const noexcept {

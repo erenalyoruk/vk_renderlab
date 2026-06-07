@@ -82,6 +82,7 @@ void write_mapped_value(gpu_buffer& buffer, const Value& value) {
   }
 
   std::memcpy(mapped_bytes.data(), &value, sizeof(Value));
+  buffer.flush();
 }
 
 template <typename Value, std::size_t Size>
@@ -94,6 +95,7 @@ void write_mapped_array(gpu_buffer& buffer, const std::array<Value, Size>& value
   }
 
   std::memcpy(mapped_bytes.data(), source_bytes.data(), source_bytes.size_bytes());
+  buffer.flush();
 }
 
 [[nodiscard]] vk::VertexInputBindingDescription make_debug_vertex_binding() noexcept {
@@ -516,20 +518,34 @@ void renderer::create_frame_resources() {
 }
 
 void renderer::create_debug_scene_resources() {
-  debug_vertex_buffer_ = context_.allocator().create_buffer(buffer_description{
+  gpu_buffer vertex_staging_buffer = context_.allocator().create_buffer(buffer_description{
     .size = sizeof(debug_vertex) * debug_cube_vertices.size(),
-    .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+    .usage = vk::BufferUsageFlagBits::eTransferSrc,
     .memory = memory_usage::cpu_to_gpu,
     .mapped = true,
+  });
+  gpu_buffer index_staging_buffer = context_.allocator().create_buffer(buffer_description{
+    .size = sizeof(std::uint16_t) * debug_cube_indices.size(),
+    .usage = vk::BufferUsageFlagBits::eTransferSrc,
+    .memory = memory_usage::cpu_to_gpu,
+    .mapped = true,
+  });
+
+  debug_vertex_buffer_ = context_.allocator().create_buffer(buffer_description{
+    .size = vertex_staging_buffer.size(),
+    .usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+    .memory = memory_usage::gpu_only,
   });
   debug_index_buffer_ = context_.allocator().create_buffer(buffer_description{
-    .size = sizeof(std::uint16_t) * debug_cube_indices.size(),
-    .usage = vk::BufferUsageFlagBits::eIndexBuffer,
-    .memory = memory_usage::cpu_to_gpu,
-    .mapped = true,
+    .size = index_staging_buffer.size(),
+    .usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+    .memory = memory_usage::gpu_only,
   });
-  write_mapped_array(debug_vertex_buffer_, debug_cube_vertices);
-  write_mapped_array(debug_index_buffer_, debug_cube_indices);
+
+  write_mapped_array(vertex_staging_buffer, debug_cube_vertices);
+  write_mapped_array(index_staging_buffer, debug_cube_indices);
+  copy_buffer(vertex_staging_buffer.handle(), debug_vertex_buffer_.handle(), vertex_staging_buffer.size());
+  copy_buffer(index_staging_buffer.handle(), debug_index_buffer_.handle(), index_staging_buffer.size());
 
   vk::DescriptorSetLayoutBinding scene_uniform_binding{};
   scene_uniform_binding.binding = 0;
@@ -542,6 +558,35 @@ void renderer::create_debug_scene_resources() {
   debug_scene_descriptor_set_layout_ = vk::raii::DescriptorSetLayout{context_.device().handle(), layout_create_info};
 
   create_debug_scene_descriptor_sets();
+}
+
+void renderer::copy_buffer(vk::Buffer source, vk::Buffer destination, vk::DeviceSize size) {
+  vk::CommandBufferAllocateInfo allocate_info{};
+  allocate_info.commandPool = *command_pool_;
+  allocate_info.level = vk::CommandBufferLevel::ePrimary;
+  allocate_info.commandBufferCount = 1;
+
+  std::vector<vk::raii::CommandBuffer> command_buffers =
+      context_.device().handle().allocateCommandBuffers(allocate_info);
+  const vk::raii::CommandBuffer& command_buffer = command_buffers.at(0);
+
+  vk::CommandBufferBeginInfo begin_info{};
+  begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+  command_buffer.begin(begin_info);
+  vk::BufferCopy copy_region{};
+  copy_region.srcOffset = 0;
+  copy_region.dstOffset = 0;
+  copy_region.size = size;
+  command_buffer.copyBuffer(source, destination, copy_region);
+  command_buffer.end();
+
+  vk::CommandBufferSubmitInfo command_buffer_info{};
+  command_buffer_info.commandBuffer = *command_buffer;
+  vk::SubmitInfo2 submit_info{};
+  submit_info.setCommandBufferInfos(command_buffer_info);
+
+  context_.device().graphics_queue().submit2(submit_info);
+  context_.device().graphics_queue().waitIdle();
 }
 
 void renderer::create_debug_scene_descriptor_sets() {

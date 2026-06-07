@@ -58,6 +58,7 @@ class gpu_buffer final {
   [[nodiscard]] vk::DeviceSize size() const noexcept;
   [[nodiscard]] std::span<std::byte> mapped_bytes() noexcept;
   [[nodiscard]] std::span<const std::byte> mapped_bytes() const noexcept;
+  void flush() const;
   [[nodiscard]] explicit operator bool() const noexcept;
 
  private:
